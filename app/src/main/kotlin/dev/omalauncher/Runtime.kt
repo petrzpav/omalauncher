@@ -389,6 +389,8 @@ class Runtime(
                 linux = false
                 widgets.linuxChanged(false)
                 audio.stop()
+                // Its player is gone with it: off the lock screen and the car, and the audio focus given back.
+                linuxMedia.clear()
                 computerLink.linuxChanged(false)
                 deviceSync.linuxChanged(false)
                 withContext(Dispatchers.IO) { proot.stop() }

@@ -76,6 +76,12 @@ class LinuxMedia(
 
     /** Paused for a moment's loss (a call, a navigation prompt): the focus is kept, and it plays again when it's back. */
     private var pausedForFocus = false
+
+    /**
+     * Paused for good by another app taking the focus: the player saying it still plays (its pause not through yet)
+     * doesn't take the focus back; it's asked for again once it said it stopped, or on a press of play.
+     */
+    private var lostFocus = false
     private var session: MediaSession? = null
     private var receiver: BroadcastReceiver? = null
 
@@ -138,7 +144,8 @@ class LinuxMedia(
         artSrc = null
         nm.cancel(NOTIFICATION)
         pausedForFocus = false
-        syncFocus(false)
+        lostFocus = false
+        syncFocus(false, pressed = false)
         // Kept, inactive and empty: a car's browser service holds its token (see [token]).
         session?.run {
             setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_NONE, 0, 0f).build())
@@ -148,41 +155,63 @@ class LinuxMedia(
         onChanged?.invoke()
     }
 
-    private fun publish() {
+    /** [pressed]: from a press here (play asks for the focus), not from the player's own set. */
+    private fun publish(pressed: Boolean = false) {
         val v = now ?: return
         val s = session()
         s.setMetadata(metadata(v))
         s.setPlaybackState(playback(v))
         s.isActive = true
-        syncFocus(v.bool("playing") == true)
+        syncFocus(v.bool("playing") == true, pressed)
         if (nm.areNotificationsEnabled()) {
             nm.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.linux_media_channel), NotificationManager.IMPORTANCE_LOW))
             nm.notify(NOTIFICATION, notification(v, s))
         }
     }
 
-    /** Holds the focus while it plays, and while it's paused for a moment's loss; gives it back otherwise. */
-    private fun syncFocus(playing: Boolean) {
+    /**
+     * Holds the focus while it plays, and while it's paused for a moment's loss; gives it back otherwise. After a loss
+     * the player's own "still playing" (its pause not through yet) changes nothing: only a press of play, or the player
+     * starting again after it said it stopped, asks for the focus again.
+     */
+    private fun syncFocus(
+        playing: Boolean,
+        pressed: Boolean,
+    ) {
         if (playing) {
+            if (!pressed && (pausedForFocus || lostFocus)) return
             pausedForFocus = false
-            if (!focused) focused = audio.requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-        } else if (focused && !pausedForFocus) {
-            audio.abandonAudioFocusRequest(focusRequest)
-            focused = false
+            lostFocus = false
+            if (!focused) {
+                focused = audio.requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                if (!focused) Log.w(TAG, "audio focus denied: Android Auto and a car's radio won't switch to it")
+            }
+        } else {
+            lostFocus = false
+            if (focused && !pausedForFocus) {
+                audio.abandonAudioFocusRequest(focusRequest)
+                focused = false
+            }
         }
     }
 
     /** Another app took the focus or gave it back; ducking is Android's own. Main. */
     private fun onFocus(change: Int) {
-        val playing = now?.bool("playing") == true
+        val v = now
+        val playing = v?.bool("playing") == true
+        // Only a player that can be paused from here: one without a command or a pause plays on regardless.
+        val canPause = v != null && v.str("command") != null && "pause" in actions(v)
         when (change) {
             AudioManager.AUDIOFOCUS_LOSS -> {
                 focused = false
                 pausedForFocus = false
-                if (playing) press("pause")
+                if (playing) {
+                    lostFocus = true
+                    if (canPause) press("pause")
+                }
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT ->
-                if (playing) {
+                if (playing && canPause) {
                     pausedForFocus = true
                     press("pause")
                 }
@@ -249,7 +278,7 @@ class LinuxMedia(
         if (shown.isNotEmpty()) {
             now = Obj(v.fields + shown)
             setAt = SystemClock.elapsedRealtime()
-            publish()
+            publish(pressed = true)
         }
         val command = v.str("command") ?: return
         val line = command + " " + word + (second?.let { " $it" } ?: "")
