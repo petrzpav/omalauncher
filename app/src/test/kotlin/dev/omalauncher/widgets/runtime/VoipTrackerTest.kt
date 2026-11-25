@@ -93,4 +93,11 @@ class VoipTrackerTest {
         val keys = listOf("+420 777 123 456", "777123456", "00420777123456", "(+420) 777-123-456").map(PhoneCalls::numberKey).toSet()
         assertEquals(setOf("777123456"), keys)
     }
+
+    @Test fun numbersAreDialledAsDigits() {
+        assertEquals("+420777123456", PhoneCalls.dialable("+420 777-123 456"))
+        assertEquals("+420777123456", PhoneCalls.dialable("00420 777 123 456"))
+        assertEquals("777123456", PhoneCalls.dialable("(777) 123.456"))
+        assertEquals("*21#", PhoneCalls.dialable("*21#"))
+    }
 }

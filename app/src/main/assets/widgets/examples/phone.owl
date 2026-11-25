@@ -38,11 +38,15 @@ app "phone" {
   source tick = clock every 1s
 
   state tab = "recents" persist     // recents, contacts or keypad
-  state only = "all" persist        // recents: all or missed
-  state open = ""                   // the row unfolded, by its id
-  state query = ""                  // contacts' search
+  state only = "all"                // recents: all or missed
+  state open = []                   // the rows unfolded, by id; they stay open, so nothing above a finger moves
+  state query = ""                  // the search, shared by recents and contacts
   state digits = ""                 // the keypad's number
   state askedAt = 0                 // when allow was tapped, for its busy moment
+  state callAt = 0                  // when a call key was tapped: it shows busy, and a second tap places no second call
+  state callId = ""                 // which call key that was
+  state filledAt = 0                // when the empty keypad brought back the last number, so a double tap doesn't call it
+  state voipHint = true persist     // the notification-access banner, until it's closed
 
   let calls = c.calls ?? []
   let missed = calls.filter(e => e.direction == "missed")
@@ -50,28 +54,56 @@ app "phone" {
   let today = fmtTime(now, "yyyyMMdd")
   let yesterday = fmtTime(now - 86400, "yyyyMMdd")
   let year = fmtTime(now, "yyyy")
-  let asking = tick - askedAt < 6
+  let asking = tick - askedAt < 3
+  let dialing = tick - callAt < 3
   // The last number called, for the keypad's call key while it's empty, as phones do.
-  let lastOut = (calls.find(e => e.direction == "out" && !e.voip && e.number != "") ?? {number: ""}).number
+  let lastOut = (calls.find(e => e.direction == "out" && !e.voip && e.dial != "") ?? {dial: ""}).dial
 
   // Contacts: favourites first while nothing is typed; by name, or by number once it's digits.
   let people = c.contacts ?? []
   let typed = trim(query)
-  let typedDigits = replace(replace(replace(typed, " ", ""), "+", ""), "-", "")
+  // Numbers are searched in `dial`, each number as digits (and its +), however it was written.
+  let typedDigits = replace(replace(replace(replace(replace(replace(replace(typed, " ", ""), "+", ""), "-", ""), "(", ""), ")", ""), ".", ""), "/", "")
   let byNumber = typed != "" && match(typedDigits, "^([0-9]+)$") != null
   let found = typed == "" ? [] : (byNumber
-    ? people.filter(p => p.numbers.any(n => contains(replace(replace(n, " ", ""), "-", ""), typedDigits)))
+    ? people.filter(p => p.dial.any(d => contains(d, typedDigits)))
     : rank(people, typed))
-  let contactRows = typed == ""
-    ? flatten([people.filter(p => p.starred).map(p => merge(p, {sec: "favourites"})), people.map(p => merge(p, {sec: "all contacts"}))], 1)
-    : found.map(p => merge(p, {sec: ""}))
+  let favs = people.filter(p => p.starred)
+  // Recents' search: up to three contacts that match, then the calls with that number, or with one of the contacts
+  // found or a name that has the text, newest first.
+  let foundIds = byNumber ? [] : found.take(20).map(p => p.contact)
+  let low = lower(typed)
+  let callHits = typed == "" ? listed : (byNumber
+    ? listed.filter(e => contains(e.dial, typedDigits))
+    : listed.filter(e => contains(lower(e.name), low) || (e.contact != "" && foundIds.indexOf(e.contact) >= 0)))
+  let contactHits = typed == "" ? [] : found.take(3).map(p => merge(p, {kind: "contact", id: "c:${p.contact}"}))
+  let recentRows = flatten([contactHits, callHits], 1)
+
   // The keypad's matches: contacts whose number has the digits typed, at most three.
   let padDigits = replace(digits, "+", "")
-  let padMatches = len(padDigits) < 3 ? [] : people.filter(p => p.numbers.any(n => contains(replace(replace(n, " ", ""), "-", ""), padDigits))).take(3)
+  let padMatches = len(padDigits) < 3 ? [] : people.filter(p => p.dial.any(d => contains(d, padDigits))).take(3)
 
   // An icon from the assets above, in one color.
   component Icon(src, tint = foreground, s = 22) {
     Image { src: src; tint: tint; size: s }
+  }
+
+  // Who a row is: the first letter of a name, a person for a bare number, or the app a call was made in.
+  component Avatar(name, app) {
+    let initial = upper(sub(name, 0, 1))
+    Box {
+      size: 40
+      radius: 20
+      align: center
+      background: app != "" ? transparent : alpha(accent, 0.16)
+      if app != "" {
+        Image { src: app; size: 36 }
+      } else if initial != "" && !contains("+0123456789(*#", initial) {
+        Text { text: initial; color: accent; align: center; fill: width; maxLines: 1 }
+      } else {
+        Icon { src: icPerson; tint: accent; s: 22 }
+      }
+    }
   }
 
   // A round key with an icon: the handset on a row, the keypad's call key.
@@ -84,6 +116,18 @@ app "phone" {
       borderColor: alpha(tint, 0.45)
       background: solid ? tint : alpha(tint, 0.12)
       Icon { src: src; tint: solid ? background : tint; s: s * 0.48 }
+    }
+  }
+
+  // A key that calls [target] (a number, or a call or contact entry): busy for a moment once tapped, and deaf to a
+  // second tap meanwhile, so a double tap places one call.
+  component CallKey(target, id, s = 44, solid = false, src = icCall) {
+    let busy = dialing && callId == id
+    Box {
+      size: s
+      align: center
+      onTap: { if !dialing { haptic(); callAt = tick; callId = id; calls("call", target) } }
+      Round { src: src; tint: busy ? muted : green; s: s; solid: solid }
     }
   }
 
@@ -101,16 +145,44 @@ app "phone" {
     }
   }
 
-  component Chip(word, lit) {
-    Box {
-      height: 32
-      padding: [14, 0]
+  // The search field, shared by recents and contacts; the clear key keeps its room, so typing moves nothing.
+  component Search(hint) {
+    Row {
+      fill: width
+      height: 52
+      gap: 4
+      padding: [16, 0, 4, 0]
       align: center
-      radius: 16
-      border: 1
-      borderColor: lit ? accent : alpha(muted, 0.35)
-      background: lit ? alpha(accent, 0.18) : transparent
-      Text { text: word; style: small; color: lit ? accent : foreground; maxLines: 1 }
+      Input { text: query; placeholder: hint; onChange: { query = value; open = [] }; weight: 1 }
+      Box {
+        size: 44
+        align: center
+        radius: 22
+        if query != "" {
+          Box { size: 44; align: center; radius: 22; onTap: { query = ""; open = [] }; Text { text: "×"; fontSize: 22; color: muted; align: center; fill: width } }
+        }
+      }
+    }
+  }
+
+  component Chip(word, v) {
+    let lit = only == v
+    Box {
+      width: 96
+      height: 44
+      align: center
+      // Tapped again it shows every call.
+      onTap: { haptic("light"); only = lit ? "all" : v; open = [] }
+      Box {
+        width: 96
+        height: 36
+        align: center
+        radius: 18
+        border: 1
+        borderColor: lit ? accent : alpha(muted, 0.35)
+        background: lit ? alpha(accent, 0.18) : transparent
+        Text { text: word; style: small; color: lit ? accent : foreground; align: center; fill: width; maxLines: 1 }
+      }
     }
   }
 
@@ -134,7 +206,7 @@ app "phone" {
           borderColor: accent
           background: alpha(accent, asking ? 0.08 : 0.18)
           onTap: { if !asking { haptic(); askedAt = tick; calls("request") } }
-          Text { text: asking ? "asking…" : "allow"; color: asking ? muted : accent; maxLines: 1 }
+          Text { text: asking ? "asking…" : "allow"; color: asking ? muted : accent; align: center; fill: width; maxLines: 1 }
         }
       }
     }
@@ -147,7 +219,7 @@ app "phone" {
       gap: 2
       align: center
       justify: center
-      onTap: { if tab != id { haptic("light"); tab = id; open = "" } }
+      onTap: { if tab != id { haptic("light"); tab = id; open = [] } }
       Box {
         width: 56
         height: 30
@@ -168,7 +240,9 @@ app "phone" {
     let isMissed = e.direction == "missed"
     let long = e.duration >= 3600 ? fmtTime(e.duration, "H:mm:ss", "UTC") : (e.duration >= 60 ? "${floor(e.duration / 60)}m ${pad(e.duration % 60, 2, "0")}s" : "${e.duration}s")
     let parts = [e.voip ? lower(e.app) : null, e.video ? "video" : null, fmtTime(e.start, "HH:mm"), isMissed ? "missed" : (e.duration > 0 ? long : (e.direction == "out" ? "no answer" : null))]
-    let unfolded = open == e.id
+    let unfolded = open.indexOf(e.id) >= 0
+    // A private caller has nothing to call, message or save.
+    let actionable = e.voip || e.number != ""
       fill: width
       gap: 0
       if header != "" {
@@ -181,13 +255,10 @@ app "phone" {
         align: center
         padding: [16, 0, 12, 0]
         background: unfolded ? alpha(muted, 0.08) : transparent
-        onTap: open = unfolded ? "" : e.id
-        onLongPress: { haptic(); calls("contact", e) }
-        Box {
-          size: 40
-          align: center
-          Image { src: e.icon; size: 34 }
-        }
+        onTap: { if actionable { open = unfolded ? open.filter(x => x != e.id) : flatten([open, [e.id]], 1) } }
+        onLongPress: { if actionable { calls("contact", e) } }
+        // A call in another app shows that app; the phone's own show who.
+        Avatar { name: e.name; app: e.voip ? e.icon : "" }
         Column {
           weight: 1
           gap: 2
@@ -200,11 +271,8 @@ app "phone" {
           }
         }
         // The other side can be called back where there's a number, or its app can.
-        if e.voip || e.number != "" {
-          Box {
-            onTap: { haptic(); calls("call", e) }
-            Round { src: e.voip ? icOpen : icCall; tint: green }
-          }
+        if actionable {
+          CallKey { target: e; id: e.id; src: e.voip ? icOpen : icCall }
         }
       }
       if unfolded {
@@ -213,28 +281,28 @@ app "phone" {
           gap: 4
           padding: [12, 0, 12, 8]
           background: alpha(muted, 0.08)
-          if e.voip {
-            Box { weight: 1; onTap: calls("open", e); Act { src: icOpen; word: lower(e.app) } }
-            if e.number != "" { Box { weight: 1; onTap: calls("call", e.number); Act { src: icCall; word: "phone call"; tint: green } } }
-          } else {
-            if e.number != "" { Box { weight: 1; onTap: calls("call", e); Act { src: icCall; word: "call"; tint: green } } }
-          }
-          if e.number != "" { Box { weight: 1; onTap: url("sms:${e.number}"); Act { src: icMessage; word: "message" } } }
-          if e.contact != "" || e.number != "" {
-            Box { weight: 1; onTap: calls("contact", e); Act { src: e.contact != "" ? icPerson : icAdd; word: e.contact != "" ? "contact" : "add contact" } }
+          // No call here: the handset above calls, and a second tap landing here shouldn't call again.
+          if e.voip { Box { weight: 1; onTap: calls("open", e); Act { src: icOpen; word: lower(e.app) } } }
+          if e.number != "" { Box { weight: 1; onTap: url("sms:" + enc(e.dial)); Act { src: icMessage; word: "message" } } }
+          Box { weight: 1; onTap: calls("contact", e); Act { src: e.contact != "" ? icPerson : icAdd; word: e.contact != "" ? "contact" : "add contact" } }
+          // A call in another app can still be returned on the phone, last, away from where the finger was.
+          if e.voip && e.number != "" {
+            Box { weight: 1; onTap: { if !dialing { haptic(); callAt = tick; callId = e.id; calls("call", e.dial) } }; Act { src: icCall; word: "phone call"; tint: dialing && callId == e.id ? muted : green } }
           }
         }
       }
     }
   }
 
-  component ContactRow(p) {
+  component ContactRow(p, sec = "c", header = "") {
     Column {
-      let unfolded = open == "c:${p.contact}"
+      let id = "${sec}:${p.contact}"
+      let unfolded = open.indexOf(id) >= 0
+      let toggle = unfolded ? open.filter(x => x != id) : flatten([open, [id]], 1)
       fill: width
       gap: 0
-      if p.header != "" {
-        Text { text: p.header; style: label; color: muted; padding: [16, 18, 16, 6] }
+      if header != "" {
+        Text { text: header; style: label; color: muted; padding: [16, 18, 16, 6] }
       }
       Row {
         fill: width
@@ -243,24 +311,20 @@ app "phone" {
         align: center
         padding: [16, 0, 12, 0]
         background: unfolded ? alpha(muted, 0.08) : transparent
-        onTap: open = unfolded ? "" : "c:${p.contact}"
-        onLongPress: { haptic(); calls("contact", p) }
-        Box {
-          size: 40
-          radius: 20
-          align: center
-          background: alpha(accent, 0.16)
-          Text { text: upper(sub(p.name, 0, 1)); color: accent; align: center; maxLines: 1 }
-        }
+        onTap: open = toggle
+        onLongPress: calls("contact", p)
+        Avatar { name: p.name; app: "" }
         Column {
           weight: 1
           gap: 2
           Text { text: p.name; maxLines: 1 }
-          Text { text: len(p.numbers) > 1 ? "${p.numbers[0]} · +${len(p.numbers) - 1}" : p.numbers[0]; style: small; color: muted; maxLines: 1 }
+          Text { text: len(p.numbers) > 1 ? "${p.numbers[0]} · +${len(p.numbers) - 1}" : (p.numbers[0] == p.name ? "no name saved" : p.numbers[0]); style: small; color: muted; maxLines: 1 }
         }
-        Box {
-          onTap: { haptic(); calls("call", p) }
-          Round { src: icCall; tint: green }
+        // One number is called at once; with several, the handset shows them to pick from.
+        if len(p.numbers) > 1 {
+          Box { size: 44; align: center; onTap: open = toggle; Round { src: icCall; tint: green } }
+        } else {
+          CallKey { target: p.dial[0]; id: id }
         }
       }
       if unfolded {
@@ -269,7 +333,7 @@ app "phone" {
           gap: 0
           padding: [0, 0, 0, 8]
           background: alpha(muted, 0.08)
-          for n in p.numbers {
+          for n, j in p.numbers {
             Row {
               fill: width
               height: 52
@@ -277,8 +341,8 @@ app "phone" {
               align: center
               padding: [70, 0, 12, 0]
               Text { text: n; weight: 1; maxLines: 1 }
-              Box { size: 44; align: center; radius: 22; onTap: url("sms:${n}"); Icon { src: icMessage; tint: foreground; s: 20 } }
-              Box { size: 44; align: center; radius: 22; onTap: { haptic(); calls("call", n) }; Icon { src: icCall; tint: green; s: 20 } }
+              Box { size: 44; align: center; radius: 22; onTap: url("sms:" + enc(p.dial[j])); Icon { src: icMessage; tint: foreground; s: 20 } }
+              CallKey { target: p.dial[j]; id: "${id}:${j}" }
             }
           }
           Row {
@@ -303,8 +367,8 @@ app "phone" {
       justify: center
       radius: 32
       onTap: { haptic("light"); digits = sub("${digits}${k}", 0, 24) }
-      // A long press on 0 types the + of an international number.
-      onLongPress: { if k == "0" { haptic(); digits = sub("${digits}+", 0, 24) } }
+      // A long press types the key too, as a slow press; on 0 it's the + of an international number.
+      onLongPress: digits = sub("${digits}${k == "0" ? "+" : k}", 0, 24)
       Text { text: k; fontSize: 28; fontWeight: 300; align: center; maxLines: 1 }
       Text { text: letters; style: small; color: muted; align: center; maxLines: 1; minLines: 1 }
     }
@@ -314,50 +378,60 @@ app "phone" {
     fill: true
     gap: 0
 
-    if c == null {
+    if c == null && tab != "keypad" {
       // A moment while the first read runs: nothing to show yet, and nothing that would jump.
       Spacer { weight: 1 }
     } else if tab == "recents" {
-      if !c.granted {
+      if !c.granted && len(calls) == 0 {
         Empty { head: "your calls in one list"; note: "the phone's call log, and from now on calls in whatsapp, messenger and other calling apps, grouped by day. read only, on the phone"; allow: true }
       } else {
         Row {
           fill: width
-          gap: 8
-          padding: [16, 4, 16, 8]
+          gap: 0
+          padding: [0, 0, 16, 0]
           align: center
-          Box { onTap: { only = "all"; open = "" }; Chip { word: "all"; lit: only == "all" } }
-          Box { onTap: { only = "missed"; open = "" }; Chip { word: "missed"; lit: only == "missed" } }
-          Spacer { weight: 1 }
+          Search { hint: "search calls and contacts"; weight: 1 }
+          Chip { word: "missed"; v: "missed" }
         }
-        // Calls in other apps are seen in their notifications: say so while that's off, with the way to turn it on.
-        if !c.voip {
-          Row {
-            fill: width
-            height: 48
-            gap: 10
-            align: center
-            padding: [16, 0]
-            background: alpha(yellow, 0.1)
-            onTap: { haptic(); calls("request") }
-            Icon { src: icOpen; tint: yellow; s: 18 }
-            Text { text: "whatsapp & messenger calls need notification access"; style: small; color: yellow; weight: 1; maxLines: 2 }
-            Text { text: "allow"; style: small; color: accent; maxLines: 1 }
-          }
-        }
-        if len(listed) == 0 {
-          Empty { head: only == "missed" ? "no missed calls" : "no calls yet"; note: only == "missed" ? "calls you didn't answer show here" : "calls you make and get show here" }
+        if len(recentRows) == 0 {
+          Empty { head: typed != "" ? "nothing matches" : (only == "missed" ? "no missed calls" : "no calls yet"); note: typed != "" ? "try part of a name or a number" : (only == "missed" ? "calls you didn't answer show here" : "calls you make and get show here") }
         } else {
           Column {
             weight: 1
             fill: width
             gap: 0
             lazy: true
-            for e, i in listed key e.id {
-              let d = fmtTime(e.start, "yyyyMMdd")
-              let first = i == 0 || fmtTime(listed[i - 1].start, "yyyyMMdd") != d
-              let header = !first ? "" : (d == today ? "today" : (d == yesterday ? "yesterday" : fmtTime(e.start, fmtTime(e.start, "yyyy") == year ? "EEEE d MMMM" : "d MMMM yyyy", null, "en")))
-              CallRow { e: e; header: lower(header) }
+            // Calls in other apps are seen in their notifications: say so while that's off, with the way to turn it on.
+            // The list's first item, so it scrolls away, and it can be closed.
+            if !c.voip && voipHint && typed == "" {
+              Row {
+                fill: width
+                height: 56
+                gap: 8
+                align: center
+                padding: [16, 0, 4, 0]
+                background: alpha(yellow, 0.1)
+                Icon { src: icOpen; tint: yellow; s: 18 }
+                Text { text: "whatsapp & messenger calls need notification access"; style: small; color: yellow; weight: 1; maxLines: 2 }
+                Box {
+                  height: 44
+                  padding: [10, 0]
+                  align: center
+                  onTap: { if !asking { haptic(); askedAt = tick; calls("request") } }
+                  Text { text: asking ? "asking…" : "allow"; style: small; color: asking ? muted : accent; maxLines: 1 }
+                }
+                Box { size: 44; align: center; onTap: voipHint = false; Text { text: "×"; fontSize: 20; color: muted; align: center; fill: width } }
+              }
+            }
+            for e, i in recentRows key e.id {
+              if e.kind == "contact" {
+                ContactRow { p: e; header: i == 0 ? "contacts" : "" }
+              } else {
+                let d = fmtTime(e.start, "yyyyMMdd")
+                let first = i == 0 || recentRows[i - 1].kind == "contact" || fmtTime(recentRows[i - 1].start, "yyyyMMdd") != d
+                let header = !first ? "" : (d == today ? "today" : (d == yesterday ? "yesterday" : fmtTime(e.start, fmtTime(e.start, "yyyy") == year ? "EEEE d MMMM" : "d MMMM yyyy", null, "en")))
+                CallRow { e: e; header: lower(header) }
+              }
             }
           }
         }
@@ -366,17 +440,8 @@ app "phone" {
       if !c.contactsGranted {
         Empty { head: "your contacts"; note: "search them by name or number and call with a tap. read only, on the phone"; allow: true }
       } else {
-        Row {
-          fill: width
-          height: 52
-          padding: [16, 0]
-          align: center
-          Input { text: query; placeholder: "search ${len(people)} contacts"; onChange: { query = value; open = "" }; weight: 1 }
-          if query != "" {
-            Box { size: 44; align: center; onTap: { query = ""; open = "" }; Text { text: "clear"; style: small; color: muted } }
-          }
-        }
-        if len(contactRows) == 0 {
+        Search { hint: "search ${len(people)} contacts" }
+        if len(people) == 0 || (typed != "" && len(found) == 0) {
           Empty { head: typed == "" ? "no contacts" : "no one matches"; note: typed == "" ? "contacts with a phone number show here" : "try part of a name or a number" }
         } else {
           Column {
@@ -384,10 +449,12 @@ app "phone" {
             fill: width
             gap: 0
             lazy: true
-            for p, i in contactRows key "${p.sec}:${p.contact}" {
-              let header = i == 0 || contactRows[i - 1].sec != p.sec ? p.sec : ""
-              ContactRow { p: merge(p, {header: header}) }
-            }
+            for p, i in typed == "" ? favs : found key "f:${p.contact}" { ContactRow { p: p; sec: "f"; header: typed == "" && i == 0 ? "favourites" : "" } }
+            for p, i in typed == "" ? people : [] key "a:${p.contact}" { ContactRow { p: p; sec: "a"; header: i == 0 ? "all contacts" : "" } }
+            for p in typed == "" ? drop(people, 1000) : [] key "b:${p.contact}" { ContactRow { p: p; sec: "a" } }
+            for p in typed == "" ? drop(people, 2000) : [] key "d:${p.contact}" { ContactRow { p: p; sec: "a" } }
+            for p in typed == "" ? drop(people, 3000) : [] key "e:${p.contact}" { ContactRow { p: p; sec: "a" } }
+            for p in typed == "" ? drop(people, 4000) : [] key "g:${p.contact}" { ContactRow { p: p; sec: "a" } }
           }
         }
       }
@@ -400,14 +467,15 @@ app "phone" {
         justify: end
         padding: [24, 0]
         for p in padMatches key p.contact {
+          let hit = p.dial.find(d => contains(d, padDigits)) ?? p.dial[0]
           Row {
             fill: width
             height: 48
             gap: 12
             align: center
-            onTap: { haptic("light"); digits = p.numbers.find(n => contains(replace(replace(n, " ", ""), "-", ""), padDigits)) ?? p.numbers[0] }
+            onTap: { haptic("light"); digits = hit }
             Text { text: p.name; weight: 1; maxLines: 1 }
-            Text { text: p.numbers.find(n => contains(replace(replace(n, " ", ""), "-", ""), padDigits)) ?? p.numbers[0]; style: small; color: muted; maxLines: 1 }
+            Text { text: hit; style: small; color: muted; maxLines: 1 }
           }
         }
       }
@@ -416,7 +484,7 @@ app "phone" {
         height: 64
         align: center
         padding: [24, 0]
-        Text { text: digits == "" ? " " : digits; fontSize: min(36, (screenWidth ?? 400) * 1.5 / max(len(digits), 10)); fontWeight: 300; align: center; maxLines: 1 }
+        Text { text: digits == "" ? " " : digits; fontSize: min(36, ((screenWidth ?? 400) - 48) * 1.5 / max(len(digits), 10)); fontWeight: 300; align: center; maxLines: 1 }
       }
       Column {
         fill: width
@@ -429,25 +497,44 @@ app "phone" {
       }
       Row {
         fill: width
-        height: 72
-        padding: [32, 0, 32, 12]
+        height: 80
+        padding: [32, 0, 32, 8]
         align: center
         Box {
           weight: 1
           height: 64
           align: center
           // Messages the number typed; only once there is one.
-          if digits != "" {
-            Box { size: 56; radius: 28; align: center; onTap: url("sms:${digits}"); Icon { src: icMessage; tint: muted; s: 24 } }
+          if digits != "" && !contains(digits, "*") && !contains(digits, "#") {
+            Box { size: 56; radius: 28; align: center; onTap: url("sms:" + enc(digits)); Icon { src: icMessage; tint: muted; s: 24 } }
           }
         }
         Box {
           weight: 1
           height: 64
           align: center
-          // Empty, it brings back the last number called, as phones do; then it calls.
-          onTap: { haptic(); if digits == "" { digits = lastOut } else { calls("call", digits) } }
-          Round { src: icCall; tint: green; s: 64; solid: true }
+          // Empty, it brings back the last number called, as phones do; then it calls, and the number goes, so a
+          // later stray tap doesn't call it again. Nothing typed and nothing called before, there's nothing to press.
+          if digits != "" || lastOut != "" {
+            Box {
+              size: 64
+              align: center
+              onTap: {
+                if digits == "" {
+                  haptic("light")
+                  digits = lastOut
+                  filledAt = tick
+                } else if !dialing && tick - filledAt >= 1 {
+                  haptic()
+                  callAt = tick
+                  callId = "keypad"
+                  calls("call", digits)
+                  digits = ""
+                }
+              }
+              Round { src: icCall; tint: dialing && callId == "keypad" ? muted : green; s: 64; solid: true }
+            }
+          }
         }
         Box {
           weight: 1
@@ -459,7 +546,7 @@ app "phone" {
               radius: 28
               align: center
               onTap: { haptic("light"); digits = sub(digits, 0, len(digits) - 1) }
-              onLongPress: { haptic(); digits = "" }
+              onLongPress: digits = ""
               Icon { src: icBack; tint: muted; s: 24 }
             }
           }

@@ -126,9 +126,9 @@ class WidgetAsks(
     private val place = AskPermission(activity, Manifest.permission.ACCESS_COARSE_LOCATION, orSettings = true)
     private val calendar = AskPermission(activity, Manifest.permission.READ_CALENDAR, orSettings = true)
 
-    // calls("request") asks for the three one after another; only the call log opens settings once Android won't ask.
+    // calls("request") asks for the three one after another; the two the app's lists need open settings once Android won't ask.
     private val callLog = AskPermission(activity, Manifest.permission.READ_CALL_LOG, orSettings = true)
-    private val contacts = AskPermission(activity, Manifest.permission.READ_CONTACTS)
+    private val contacts = AskPermission(activity, Manifest.permission.READ_CONTACTS, orSettings = true)
     private val calling = AskPermission(activity, Manifest.permission.CALL_PHONE)
 
     // Asked for only from Android 12 on: before it, an install-time permission covers AirPods, which then never ask.

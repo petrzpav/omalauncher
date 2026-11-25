@@ -274,6 +274,7 @@ class PhoneCalls(
                 "direction" to Str(direction),
                 "name" to Str(name),
                 "number" to Str(number),
+                "dial" to Str(dialable(number)),
                 "video" to bool(video),
                 "start" to Num(start / 1000.0),
                 "duration" to Num(duration.toDouble()),
@@ -289,10 +290,10 @@ class PhoneCalls(
         val starred: Boolean,
     ) {
         val value: Value
-            get() = Obj(mapOf("contact" to Str(id.toString()), "name" to Str(name), "numbers" to Lst(numbers.map(::Str)), "starred" to bool(starred)))
+            get() = Obj(mapOf("contact" to Str(id.toString()), "name" to Str(name), "numbers" to Lst(numbers.map(::Str)), "dial" to Lst(numbers.map { Str(dialable(it)) }), "starred" to bool(starred)))
     }
 
-    /** Every contact with a phone number, by name, each number once however it's written. */
+    /** Every contact with a phone number, by name, each number once however it's written, and each person once. */
     private fun people(): List<Person> {
         val byId = LinkedHashMap<Long, Triple<String, Boolean, LinkedHashMap<String, String>>>()
         val projection = arrayOf(ContactsContract.CommonDataKinds.Phone.CONTACT_ID, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY, ContactsContract.CommonDataKinds.Phone.NUMBER, ContactsContract.CommonDataKinds.Phone.STARRED)
@@ -303,7 +304,14 @@ class PhoneCalls(
                 numbers.putIfAbsent(numberKey(number), number)
             }
         }
-        return byId.map { (id, t) -> Person(id, t.first, t.third.values.toList(), t.second) }.filter { it.name.isNotBlank() }.take(MAX_CONTACTS)
+        // The same person saved twice (a SIM copy, an account's), with the same name and numbers, is listed once.
+        return byId.map { (id, t) -> Person(id, t.first, t.third.values.toList(), t.second) }
+            .filter { it.name.isNotBlank() }
+            .groupBy { it.name.lowercase() to it.numbers.map(::numberKey).toSet() }
+            .map { (_, same) -> same.firstOrNull { it.starred } ?: same.first() }
+            // Names before contacts saved as a bare number, which would otherwise sort first.
+            .sortedBy { !it.name.first().isLetter() }
+            .take(MAX_CONTACTS)
     }
 
     companion object {
@@ -327,5 +335,19 @@ class PhoneCalls(
          * digits, which is a whole national number in much of Europe and tells numbers apart well enough elsewhere.
          */
         fun numberKey(number: String): String = number.filter(Char::isDigit).takeLast(9)
+
+        /**
+         * A number as it's dialled and searched: its digits, with the + of an international one and 00 read as one,
+         * so "+420 777-123 456", "(777) 123.456" and "00420777123456" each become one run that typed digits are found in.
+         */
+        fun dialable(number: String): String {
+            val t = number.trim()
+            val digits = t.filter { it.isDigit() || it == '*' || it == '#' }
+            return when {
+                t.startsWith("+") -> "+$digits"
+                digits.startsWith("00") && digits.length > 6 -> "+" + digits.drop(2)
+                else -> digits
+            }
+        }
     }
 }
