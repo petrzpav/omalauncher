@@ -427,5 +427,20 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Runs a user-started Linux environment and its display server" />
         </service>
+
+        <!-- petrzpav's fork: what a Linux player plays (omalauncher media) for Android Auto, which lists only media apps
+             with a browser service and this declaration. -->
+        <service
+            android:name=".linux.LinuxMediaBrowserService"
+            android:exported="true"
+            android:label="@string/linux_media_channel">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
     </application>
 </manifest>

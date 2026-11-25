@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- petrzpav's fork: Android Auto lists the launcher as a media app (LinuxMediaBrowserService). -->
+<automotiveApp>
+    <uses name="media" />
+</automotiveApp>

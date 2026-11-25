@@ -11,7 +11,9 @@ import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.Icon
+import android.media.MediaDescription
 import android.media.MediaMetadata
+import android.media.browse.MediaBrowser
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.SystemClock
@@ -63,6 +65,31 @@ class LinuxMedia(
     private var artSrc: String? = null
     private var artJob: Job? = null
 
+    /**
+     * Something set or cleared, for the car's browser ([LinuxMediaBrowserService]) to list it again. Main.
+     */
+    var onChanged: (() -> Unit)? = null
+
+    /**
+     * The session's token, for [LinuxMediaBrowserService]: a browser service takes one token for its life, so the session
+     * stays (inactive while nothing is set) once it's made.
+     */
+    val token: MediaSession.Token get() = session().sessionToken
+
+    /** What plays, as the one item a car's media browser lists (petrzpav's fork); null while nothing is set. */
+    fun item(): MediaBrowser.MediaItem? {
+        val v = now ?: return null
+        val description =
+            MediaDescription
+                .Builder()
+                .setMediaId(NOW_PLAYING)
+                .setTitle(v.str("title"))
+                .setSubtitle(listOfNotNull(v.str("artist"), v.str("album")).distinct().joinToString(" · ").ifEmpty { null })
+                .setIconBitmap(art)
+                .build()
+        return MediaBrowser.MediaItem(description, MediaBrowser.MediaItem.FLAG_PLAYABLE)
+    }
+
     /** What's set, as `omalauncher media` shows it, the position as of now. */
     fun current(): Value = now?.let { Obj(it.fields + ("position" to Num(position(it)))) } ?: Null
 
@@ -74,8 +101,10 @@ class LinuxMedia(
         if (next.str("title").isNullOrEmpty()) return "media set: a track needs a title"
         now = next
         setAt = SystemClock.elapsedRealtime()
+        val newTrack = v.fields.containsKey("title")
         loadArt(next.str("art"))
         publish()
+        if (newTrack) onChanged?.invoke()
         return null
     }
 
@@ -86,13 +115,13 @@ class LinuxMedia(
         art = null
         artSrc = null
         nm.cancel(NOTIFICATION)
+        // Kept, inactive and empty: a car's browser service holds its token (see [token]).
         session?.run {
+            setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_NONE, 0, 0f).build())
+            setMetadata(null)
             isActive = false
-            release()
         }
-        session = null
-        receiver?.let { runCatching { context.unregisterReceiver(it) } }
-        receiver = null
+        onChanged?.invoke()
     }
 
     private fun publish() {
@@ -122,6 +151,12 @@ class LinuxMedia(
                     override fun onStop() = press("stop")
 
                     override fun onSeekTo(pos: Long) = press("seek", pos / 1000)
+
+                    // The car's list has the one track: picking it plays it.
+                    override fun onPlayFromMediaId(
+                        mediaId: String?,
+                        extras: android.os.Bundle?,
+                    ) = press("play")
                 },
             )
             session = s
@@ -253,6 +288,8 @@ class LinuxMedia(
                 if (bitmap != null && src == artSrc) {
                     art = bitmap
                     publish()
+                    // The car's list shows the cover too.
+                    onChanged?.invoke()
                 }
             }
     }
@@ -287,6 +324,7 @@ class LinuxMedia(
         const val NOTIFICATION = 2
         const val ACTION = "dev.omalauncher.LINUX_MEDIA"
         const val EXTRA = "action"
+        const val NOW_PLAYING = "now"
         const val ART_PX = 512
         const val MAX_ART_BYTES = 8 shl 20
         val ACTIONS = listOf("play", "pause", "next", "previous", "seek", "stop")
