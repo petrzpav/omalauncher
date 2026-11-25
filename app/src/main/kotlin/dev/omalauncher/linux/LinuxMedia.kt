@@ -22,6 +22,8 @@ import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.system.Os
+import android.system.OsConstants
 import android.util.Log
 import dev.omalauncher.MainActivity
 import dev.omalauncher.R
@@ -36,6 +38,7 @@ import dev.omalauncher.widgets.lang.Value
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -130,6 +133,19 @@ class LinuxMedia(
         closed = false
     }
 
+    /** A press of next or previous until the player's next track arrives (or 3 s): what the car shows meanwhile. */
+    private var skipping: String? = null
+    private var skippingJob: Job? = null
+
+    /** When the last set came, and whether the player's pipe ([press]) went unanswered: then presses run its command. */
+    private var lastSetAt = 0L
+    private var pipeDead = false
+
+    /** What was last handed to the session and the notification: unchanged, they aren't sent again. */
+    private var metaKey: List<Any?>? = null
+    private var noteKey: List<Any?>? = null
+    private var channelMade = false
+
     /** A play of the track from before a stop that's under way: a second tap doesn't start the player twice. */
     private var playLastJob: Job? = null
 
@@ -164,7 +180,10 @@ class LinuxMedia(
         if (v.fields.containsKey("title")) {
             last = null
             lastArt = null
+            skipping = null
         }
+        lastSetAt = SystemClock.elapsedRealtime()
+        pipeDead = false
         val listed = LISTED.any { it in v.fields }
         loadArt(next.str("art"))
         publish()
@@ -189,6 +208,9 @@ class LinuxMedia(
         art = null
         artSrc = null
         nm.cancel(NOTIFICATION)
+        metaKey = null
+        noteKey = null
+        skipping = null
         pausedForFocus = false
         lostFocus = false
         syncFocus(false, pressed = false)
@@ -213,13 +235,24 @@ class LinuxMedia(
     private fun publish(pressed: Boolean = false) {
         val v = now ?: return
         val s = session()
-        s.setMetadata(metadata(v))
+        // The metadata (with its cover) and the notification only when what they show changed: a press or a position
+        // changes the playback state alone, and that's what has to reach the car at once.
+        val meta = listOf(v.str("title"), v.str("artist"), v.str("album"), v.num("duration"), art)
+        if (meta != metaKey) {
+            s.setMetadata(metadata(v))
+            metaKey = meta
+        }
         s.setPlaybackState(playback(v))
         s.isActive = true
         syncFocus(v.bool("playing") == true, pressed)
-        if (nm.areNotificationsEnabled()) {
-            nm.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.linux_media_channel), NotificationManager.IMPORTANCE_LOW))
+        val note = meta + listOf(v.bool("playing"), actions(v), skip(v))
+        if (nm.areNotificationsEnabled() && note != noteKey) {
+            if (!channelMade) {
+                nm.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.linux_media_channel), NotificationManager.IMPORTANCE_LOW))
+                channelMade = true
+            }
             nm.notify(NOTIFICATION, notification(v, s))
+            noteKey = note
         }
     }
 
@@ -331,22 +364,93 @@ class LinuxMedia(
     ) {
         val v = now ?: return
         if (word !in actions(v)) return
+        // Shown at once, before the player has done it (its next set says how it went): the car and the lock screen
+        // answer the finger, not the round trip.
+        val end = v.num("duration")?.takeIf { it > 0 }?.let { it - 2 }
         val shown =
             when (word) {
                 "play", "pause" -> mapOf("playing" to Bool(word == "play"), "position" to Num(position(v)))
                 "seek" -> mapOf("position" to Num((second ?: 0L).toDouble()))
+                "rewind", "forward" -> {
+                    val to = position(v) + (second ?: skip(v)) * (if (word == "rewind") -1 else 1)
+                    mapOf("position" to Num(to.coerceAtLeast(0.0).let { if (end != null) it.coerceAtMost(end) else it }))
+                }
                 else -> emptyMap()
             }
-        if (shown.isNotEmpty()) {
+        if (word == "next" || word == "previous") {
+            skipping = word
+            skippingJob?.cancel()
+            skippingJob =
+                scope.launch {
+                    delay(SKIPPING_MS)
+                    skipping = null
+                    publish()
+                }
+        }
+        if (shown.isNotEmpty() || skipping != null) {
             now = Obj(v.fields + shown)
             setAt = SystemClock.elapsedRealtime()
             publish(pressed = true)
         }
-        val command = v.str("command") ?: return
-        val line = command + " " + word + (second?.let { " $it" } ?: "")
+        deliver(v, word, second)
+    }
+
+    /**
+     * Hands a press to the player: into its `pipe` (a FIFO in Linux its bridge reads, petrzpav's fork) if it has one,
+     * a write and no process; else, or when the pipe has no reader, through its `command`. A pipe whose reader took a
+     * press but sent nothing for [PIPE_ANSWER_MS] (the bridge lost its proot) is given up on, and a press it can
+     * safely do twice (play, pause, a seek to a second) goes through the command too.
+     */
+    private fun deliver(
+        v: Obj,
+        word: String,
+        second: Long?,
+    ) {
+        val line = word + (second?.let { " $it" } ?: "")
+        val pipe = v.str("pipe")?.takeIf { !pipeDead }?.let { proot.guestFile(it) }
+        if (pipe == null) {
+            runCommand(v, line)
+            return
+        }
+        val sentAt = SystemClock.elapsedRealtime()
         scope.launch(Dispatchers.IO) {
-            val code = runCatching { proot.run(line) { Log.i(TAG, "[$word] $it") } }.getOrElse { -1 }
-            if (code != 0) Log.w(TAG, "'$line' exited $code")
+            val written =
+                runCatching {
+                    // Non-blocking: no reader is ENXIO at once, rather than an open that waits for one.
+                    val fd = Os.open(pipe.path, OsConstants.O_WRONLY or OsConstants.O_NONBLOCK, 0)
+                    try {
+                        val bytes = "$line\n".toByteArray()
+                        Os.write(fd, bytes, 0, bytes.size) == bytes.size
+                    } finally {
+                        Os.close(fd)
+                    }
+                }.getOrElse { false }
+            withContext(Dispatchers.Main) {
+                if (!written) {
+                    pipeDead = true
+                    runCommand(v, line)
+                    return@withContext
+                }
+                delay(PIPE_ANSWER_MS)
+                if (lastSetAt < sentAt && now != null) {
+                    Log.w(TAG, "the player's pipe didn't answer '$line'; its command instead")
+                    pipeDead = true
+                    if (word in AGAIN_SAFE) runCommand(v, line)
+                }
+            }
+        }
+    }
+
+    /** `<command> <word> [second]` in Linux, a process: the way a player without a pipe is pressed. */
+    private fun runCommand(
+        v: Obj,
+        line: String,
+    ) {
+        val command = v.str("command") ?: return
+        val run = "$command $line"
+        scope.launch(Dispatchers.IO) {
+            val code = runCatching { proot.run(run) { Log.i(TAG, "[$line] $it") } }.getOrElse { -1 }
+            if (code != 0) Log.w(TAG, "'$run' exited $code")
         }
     }
 
@@ -396,7 +500,12 @@ class LinuxMedia(
                 }
             }
             .setState(
-                if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
+                when {
+                    skipping == "next" -> PlaybackState.STATE_SKIPPING_TO_NEXT
+                    skipping == "previous" -> PlaybackState.STATE_SKIPPING_TO_PREVIOUS
+                    playing -> PlaybackState.STATE_PLAYING
+                    else -> PlaybackState.STATE_PAUSED
+                },
                 ((v.num("position") ?: 0.0) * 1000).toLong(),
                 (v.num("speed") ?: 1.0).toFloat(),
                 setAt,
@@ -527,7 +636,16 @@ class LinuxMedia(
         /** The step of rewind and forward, in whole seconds: the set's `skip`, else 30. */
         fun skip(v: Obj): Long = (v.num("skip") ?: 30.0).toLong().coerceIn(1, 3600)
         val DEFAULT_ACTIONS = listOf("play", "pause", "next", "previous", "seek")
-        val FIELDS = setOf("title", "artist", "album", "art", "duration", "position", "playing", "speed", "command", "actions", "skip")
+        val FIELDS = setOf("title", "artist", "album", "art", "duration", "position", "playing", "speed", "command", "actions", "skip", "pipe")
+
+        /** How long next or previous shows as skipping without the player's next track. */
+        const val SKIPPING_MS = 3000L
+
+        /** How long a press into the pipe may go without a set before the pipe is given up on. */
+        const val PIPE_ANSWER_MS = 2000L
+
+        /** Presses that do no harm done twice, run by the command too when the pipe went unanswered. */
+        val AGAIN_SAFE = setOf("play", "pause", "seek", "stop")
 
         /** What the player can do: `actions` as set, the usual ones otherwise; none without a command. */
         fun actions(v: Obj): List<String> {

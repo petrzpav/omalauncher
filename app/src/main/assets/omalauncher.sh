@@ -70,8 +70,12 @@ usage: omalauncher location       {lat, lon, accuracy (metres), time}, approxima
                                   car over Bluetooth, Android Auto, headset
                                   buttons): {title, artist, album, art (https URL
                                   or file), duration, position (seconds), playing,
-                                  speed, command, actions, skip}; without a title
-                                  it changes only the fields given. A press runs
+                                  speed, command, actions, skip, pipe}; without a
+                                  title it changes only the fields given. With
+                                  pipe (a FIFO in Linux its reader keeps open) a
+                                  press is written into it as "<word> [n]\n",
+                                  command staying for when it has no reader.
+                                  Otherwise a press runs
                                   "<command> play|pause|next|previous|stop",
                                   "<command> seek <seconds>" or "<command>
                                   rewind|forward <skip>" in Linux; actions limits
