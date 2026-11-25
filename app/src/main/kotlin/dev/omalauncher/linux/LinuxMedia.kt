@@ -105,17 +105,32 @@ class LinuxMedia(
 
     /** What plays, as the one item a car's media browser lists (petrzpav's fork); null while nothing is set. */
     fun item(): MediaBrowser.MediaItem? {
-        val v = now ?: return null
+        // After a stop, the track that was set: the car's list isn't empty, and picking it plays it again.
+        val v = now ?: last ?: return null
         val description =
             MediaDescription
                 .Builder()
                 .setMediaId(NOW_PLAYING)
                 .setTitle(v.str("title"))
                 .setSubtitle(listOfNotNull(v.str("artist"), v.str("album")).distinct().joinToString(" · ").ifEmpty { null })
-                .setIconBitmap(art)
+                .setIconBitmap(if (now != null) art else lastArt)
                 .build()
         // Playable only when a press reaches the player: tapping it in the car runs its command's play.
         return MediaBrowser.MediaItem(description, if ("play" in actions(v)) MediaBrowser.MediaItem.FLAG_PLAYABLE else 0)
+    }
+
+    /** What was set before the last clear, for the car's list: see [item]. */
+    private var last: Obj? = null
+    private var lastArt: Bitmap? = null
+
+    /** The track from before a stop, picked in the car: its player's command plays again. */
+    private fun playLast() {
+        val v = last ?: return
+        val command = v.str("command")?.takeIf { "play" in actions(v) } ?: return
+        scope.launch(Dispatchers.IO) {
+            val code = runCatching { proot.run("$command play") { Log.i(TAG, "[play last] $it") } }.getOrElse { -1 }
+            if (code != 0) Log.w(TAG, "'$command play' exited $code")
+        }
     }
 
     /** What's set, as `omalauncher media` shows it, the position as of now. */
@@ -138,6 +153,10 @@ class LinuxMedia(
 
     /** Takes the player away from Android's media controls. */
     fun clear() {
+        now?.let {
+            last = it
+            lastArt = art
+        }
         now = null
         artJob?.cancel()
         art = null
@@ -251,7 +270,7 @@ class LinuxMedia(
                     override fun onPlayFromMediaId(
                         mediaId: String?,
                         extras: android.os.Bundle?,
-                    ) = press("play")
+                    ) = if (now == null) playLast() else press("play")
 
                     // "Play … on Omalauncher" from the car or the Assistant: there's only the one player to play.
                     override fun onPlayFromSearch(
