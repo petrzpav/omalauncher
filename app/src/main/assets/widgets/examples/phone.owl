@@ -77,7 +77,9 @@ app "phone" {
     ? listed.filter(e => contains(e.dial, typedDigits))
     : listed.filter(e => contains(lower(e.name), low) || (e.contact != "" && foundIds.indexOf(e.contact) >= 0)))
   let contactHits = typed == "" ? [] : found.take(3).map(p => merge(p, {kind: "contact", id: "c:${p.contact}"}))
-  let recentRows = flatten([contactHits, callHits], 1)
+  // Three contacts at most here; the rest are a tap away, under contacts, with the same search.
+  let moreContacts = len(found) > 3 ? [{kind: "more", id: "more"}] : []
+  let recentRows = flatten([contactHits, moreContacts, callHits], 1)
 
   // The keypad's matches: contacts whose number has the digits typed, at most three.
   let padDigits = replace(digits, "+", "")
@@ -123,8 +125,10 @@ app "phone" {
   // second tap meanwhile, so a double tap places one call.
   component CallKey(target, id, s = 44, solid = false, src = icCall) {
     let busy = dialing && callId == id
+    // The circle as drawn, in a bigger box to hit.
     Box {
-      size: s
+      width: s + 12
+      height: s + 8
       align: center
       onTap: { if !dialing { haptic(); callAt = tick; callId = id; calls("call", target) } }
       Round { src: src; tint: busy ? muted : green; s: s; solid: solid }
@@ -145,23 +149,28 @@ app "phone" {
     }
   }
 
-  // The search field, shared by recents and contacts; the clear key keeps its room, so typing moves nothing.
-  component Search(hint) {
-    Row {
+  // The search field, shared by recents and contacts; the clear key sits in the field and keeps its room, so
+  // typing moves nothing. The line runs under both, to [right] dp from the edge.
+  component Search(hint, right = 12) {
+    Column {
       fill: width
-      height: 52
-      gap: 4
-      padding: [16, 0, 4, 0]
-      align: center
-      Input { text: query; placeholder: hint; onChange: { query = value; open = [] }; weight: 1 }
-      Box {
-        size: 44
+      gap: 0
+      padding: [12, 4, right, 4]
+      Row {
+        fill: width
+        height: 44
+        gap: 0
         align: center
-        radius: 22
-        if query != "" {
-          Box { size: 44; align: center; radius: 22; onTap: { query = ""; open = [] }; Text { text: "×"; fontSize: 22; color: muted; align: center; fill: width } }
+        Input { text: query; placeholder: hint; underline: false; onChange: { query = value; open = [] }; weight: 1 }
+        Box {
+          size: 44
+          align: center
+          if query != "" {
+            Box { size: 44; align: center; radius: 22; onTap: { query = ""; open = [] }; Text { text: "×"; fontSize: 22; color: muted; align: center; fill: width } }
+          }
         }
       }
+      Box { fill: width; height: 1; background: alpha(muted, query != "" ? 0.6 : 0.35) }
     }
   }
 
@@ -246,14 +255,14 @@ app "phone" {
       fill: width
       gap: 0
       if header != "" {
-        Text { text: header; style: label; color: muted; padding: [16, 18, 16, 6] }
+        Text { text: header; style: label; color: muted; padding: [12, 18, 12, 6] }
       }
       Row {
         fill: width
         height: 64
         gap: 14
         align: center
-        padding: [16, 0, 12, 0]
+        padding: [12, 0, 6, 0]
         background: unfolded ? alpha(muted, 0.08) : transparent
         onTap: { if actionable { open = unfolded ? open.filter(x => x != e.id) : flatten([open, [e.id]], 1) } }
         onLongPress: { if actionable { calls("contact", e) } }
@@ -262,7 +271,8 @@ app "phone" {
         Column {
           weight: 1
           gap: 2
-          Text { text: who; color: isMissed ? red : foreground; maxLines: 1 }
+          // Red marks a missed call among the rest; with only missed ones listed it would mark nothing.
+          Text { text: who; color: isMissed && only != "missed" ? red : foreground; maxLines: 1 }
           Row {
             gap: 4
             align: center
@@ -302,14 +312,14 @@ app "phone" {
       fill: width
       gap: 0
       if header != "" {
-        Text { text: header; style: label; color: muted; padding: [16, 18, 16, 6] }
+        Text { text: header; style: label; color: muted; padding: [12, 18, 12, 6] }
       }
       Row {
         fill: width
         height: 64
         gap: 14
         align: center
-        padding: [16, 0, 12, 0]
+        padding: [12, 0, 6, 0]
         background: unfolded ? alpha(muted, 0.08) : transparent
         onTap: open = toggle
         onLongPress: calls("contact", p)
@@ -318,11 +328,12 @@ app "phone" {
           weight: 1
           gap: 2
           Text { text: p.name; maxLines: 1 }
-          Text { text: len(p.numbers) > 1 ? "${p.numbers[0]} · +${len(p.numbers) - 1}" : (p.numbers[0] == p.name ? "no name saved" : p.numbers[0]); style: small; color: muted; maxLines: 1 }
+          Text { text: len(p.numbers) > 1 ? "${p.numbers[0]} · ${len(p.numbers) - 1} more" : (p.numbers[0] == p.name ? "no name saved" : p.numbers[0]); style: small; color: muted; maxLines: 1 }
         }
         // One number is called at once; with several, the handset shows them to pick from.
         if len(p.numbers) > 1 {
-          Box { size: 44; align: center; onTap: open = toggle; Round { src: icCall; tint: green } }
+          // Not green: green calls at once, this one shows the numbers.
+          Box { width: 56; height: 52; align: center; onTap: open = toggle; Round { src: icCall; tint: accent } }
         } else {
           CallKey { target: p.dial[0]; id: id }
         }
@@ -339,17 +350,18 @@ app "phone" {
               height: 52
               gap: 8
               align: center
-              padding: [70, 0, 12, 0]
+              padding: [66, 0, 6, 0]
               Text { text: n; weight: 1; maxLines: 1 }
               Box { size: 44; align: center; radius: 22; onTap: url("sms:" + enc(p.dial[j])); Icon { src: icMessage; tint: foreground; s: 20 } }
-              CallKey { target: p.dial[j]; id: "${id}:${j}" }
+              // One number is called from the handset above already.
+              if len(p.numbers) > 1 { CallKey { target: p.dial[j]; id: "${id}:${j}" } }
             }
           }
           Row {
             fill: width
             height: 44
             align: center
-            padding: [70, 0, 12, 0]
+            padding: [66, 0, 12, 0]
             onTap: calls("contact", p)
             Text { text: "open in contacts"; style: small; color: accent; maxLines: 1 }
           }
@@ -388,9 +400,9 @@ app "phone" {
         Row {
           fill: width
           gap: 0
-          padding: [0, 0, 16, 0]
+          padding: [0, 0, 12, 0]
           align: center
-          Search { hint: "search calls and contacts"; weight: 1 }
+          Search { hint: "search calls and contacts"; right: 8; weight: 1 }
           Chip { word: "missed"; v: "missed" }
         }
         if len(recentRows) == 0 {
@@ -409,7 +421,7 @@ app "phone" {
                 height: 56
                 gap: 8
                 align: center
-                padding: [16, 0, 4, 0]
+                padding: [12, 0, 0, 0]
                 background: alpha(yellow, 0.1)
                 Icon { src: icOpen; tint: yellow; s: 18 }
                 Text { text: "whatsapp & messenger calls need notification access"; style: small; color: yellow; weight: 1; maxLines: 2 }
@@ -420,15 +432,24 @@ app "phone" {
                   onTap: { if !asking { haptic(); askedAt = tick; calls("request") } }
                   Text { text: asking ? "asking…" : "allow"; style: small; color: asking ? muted : accent; maxLines: 1 }
                 }
-                Box { size: 44; align: center; onTap: voipHint = false; Text { text: "×"; fontSize: 20; color: muted; align: center; fill: width } }
+                Box { size: 44; align: center; onTap: voipHint = false; Text { text: "×"; fontSize: 22; color: muted; align: center; fill: width } }
               }
             }
             for e, i in recentRows key e.id {
               if e.kind == "contact" {
                 ContactRow { p: e; header: i == 0 ? "contacts" : "" }
+              } else if e.kind == "more" {
+                Row {
+                  fill: width
+                  height: 44
+                  padding: [66, 0, 12, 0]
+                  align: center
+                  onTap: { tab = "contacts"; open = [] }
+                  Text { text: "all ${len(found)} contacts"; style: small; color: accent; maxLines: 1 }
+                }
               } else {
                 let d = fmtTime(e.start, "yyyyMMdd")
-                let first = i == 0 || recentRows[i - 1].kind == "contact" || fmtTime(recentRows[i - 1].start, "yyyyMMdd") != d
+                let first = i == 0 || recentRows[i - 1].kind != null || fmtTime(recentRows[i - 1].start, "yyyyMMdd") != d
                 let header = !first ? "" : (d == today ? "today" : (d == yesterday ? "yesterday" : fmtTime(e.start, fmtTime(e.start, "yyyy") == year ? "EEEE d MMMM" : "d MMMM yyyy", null, "en")))
                 CallRow { e: e; header: lower(header) }
               }
@@ -465,7 +486,7 @@ app "phone" {
         fill: width
         gap: 0
         justify: end
-        padding: [24, 0]
+        padding: [12, 0]
         for p in padMatches key p.contact {
           let hit = p.dial.find(d => contains(d, padDigits)) ?? p.dial[0]
           Row {
