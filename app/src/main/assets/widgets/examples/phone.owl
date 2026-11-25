@@ -283,8 +283,9 @@ app "phone" {
         }
         // The other side can be called back where there's a number, or its app can.
         if actionable {
-          // Green calls; a call in another app can only be returned there, so its key opens that app, in accent.
-          CallKey { target: e; id: e.id; src: e.voip ? icOpen : icCall; tint: e.voip ? accent : green }
+          // Green calls: on the phone, or for WhatsApp in WhatsApp. A call in another app it can't start just opens
+          // that app, in accent.
+          CallKey { target: e; id: e.id; src: e.callable ? (e.video ? icVideo : icCall) : icOpen; tint: e.callable ? green : accent }
         }
       }
       if unfolded && foldable {
@@ -294,13 +295,10 @@ app "phone" {
           padding: [12, 0, 12, 8]
           background: alpha(muted, 0.08)
           // No call here: the handset above calls, and a second tap landing here shouldn't call again.
-          // The key above opens the app (WhatsApp on the chat with that number), so it isn't repeated here.
-          if e.number != "" { Box { weight: 1; onTap: url("sms:" + enc(e.dial)); Act { src: icMessage; word: "message" } } }
+          // WhatsApp's chat with the person; the key above calls them there.
+          if e.voip && e.callable { Box { weight: 1; onTap: calls("open", e); Act { src: icMessage; word: "chat" } } }
+          if e.number != "" && !e.voip { Box { weight: 1; onTap: url("sms:" + enc(e.dial)); Act { src: icMessage; word: "message" } } }
           Box { weight: 1; onTap: calls("contact", e); Act { src: e.contact != "" ? icPerson : icAdd; word: e.contact != "" ? "contact" : "add contact" } }
-          // A call in another app can still be returned on the phone, last, away from where the finger was.
-          if e.voip && e.number != "" {
-            Box { weight: 1; onTap: { if !dialing { haptic(); callAt = tick; callId = e.id; calls("call", e.dial) } }; Act { src: icCall; word: "phone call"; tint: dialing && callId == e.id ? muted : green } }
-          }
         }
       }
     }

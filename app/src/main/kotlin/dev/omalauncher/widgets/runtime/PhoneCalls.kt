@@ -100,16 +100,58 @@ class PhoneCalls(
 
     /**
      * calls("call", n): a phone call to [target], a number or an entry of calls or contacts (its first number). Placed at
-     * once where placing calls is allowed, else the dialer opens with the number to press call; a call in another app
-     * opens that app instead, as only it can call back.
+     * once where placing calls is allowed, else the dialer opens with the number to press call. A call in another app is
+     * returned in that app, never on the phone: a WhatsApp call to someone saved with WhatsApp starts one there (a video
+     * call for a video call), through the contact's WhatsApp entry as the contacts app does; otherwise the app opens.
      */
     fun call(target: Value?) {
         val entry = target as? Obj
-        if (entry != null && entry.fields["voip"] == bool(true)) return open(entry)
+        if (entry != null && entry.fields["voip"] == bool(true)) {
+            if (entry.fields["package"].textOrNull() == WHATSAPP && whatsappCall(entry)) return
+            return open(entry)
+        }
         val number = numberOf(target) ?: return
         val uri = Uri.fromParts("tel", number, null)
         val intent = Intent(if (calling) Intent.ACTION_CALL else Intent.ACTION_DIAL, uri)
         start(intent) || start(Intent(Intent.ACTION_DIAL, uri))
+    }
+
+    /** Starts a WhatsApp call to [entry]'s number through its WhatsApp row in the contacts; false where there's none. */
+    private fun whatsappCall(entry: Obj): Boolean {
+        val digits = entry.fields["number"].textOrNull()?.filter(Char::isDigit).orEmpty()
+        if (digits.length < 7 || !contacts) return false
+        val mime = if (entry.fields["video"] == bool(true)) WA_VIDEO else WA_VOICE
+        val id =
+            runCatching {
+                context.contentResolver.query(
+                    ContactsContract.Data.CONTENT_URI, arrayOf(ContactsContract.Data._ID),
+                    "${ContactsContract.Data.MIMETYPE} = ? AND ${ContactsContract.Data.DATA1} = ?", arrayOf(mime, "$digits@s.whatsapp.net"), null,
+                )?.use { if (it.moveToFirst()) it.getLong(0) else null }
+            }.getOrNull() ?: return false
+        val uri = ContentUris.withAppendedId(ContactsContract.Data.CONTENT_URI, id)
+        return start(Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).setPackage(WHATSAPP))
+    }
+
+    /** People saved with WhatsApp, from WhatsApp's own rows in the contacts: who, the contact, and their WhatsApp number. */
+    private class WaPerson(
+        val contact: Long,
+        val name: String,
+        val digits: String,
+    )
+
+    private fun whatsappPeople(): List<WaPerson> {
+        val out = ArrayList<WaPerson>()
+        context.contentResolver.query(
+            ContactsContract.Data.CONTENT_URI,
+            arrayOf(ContactsContract.Data.CONTACT_ID, ContactsContract.Data.DISPLAY_NAME_PRIMARY, ContactsContract.Data.DATA1),
+            "${ContactsContract.Data.MIMETYPE} = ?", arrayOf(WA_VOICE), null,
+        )?.use { c ->
+            while (c.moveToNext()) {
+                val digits = c.getString(2)?.substringBefore('@')?.takeIf { d -> d.isNotEmpty() && d.all(Char::isDigit) } ?: continue
+                out += WaPerson(c.getLong(0), c.getString(1).orEmpty(), digits)
+            }
+        }
+        return out
     }
 
     /**
@@ -204,13 +246,25 @@ class PhoneCalls(
         if (g.log) runCatching { rows += logged(dialer, byNumber) }
         val recording = VoipCalls.recording(context)
         if (recording) {
+            // WhatsApp's notification has a name and rarely a number: the person saved with WhatsApp under that name has
+            // the number WhatsApp calls, which may not be their contact's first.
+            val wa = if (g.contacts) runCatching { whatsappPeople() }.getOrDefault(emptyList()) else emptyList()
+            val waByDigits = wa.associateBy { numberKey(it.digits) }
+            val waByName = wa.groupBy { it.name.lowercase() }
             for (c in VoipCalls.all(context)) {
-                // The app's notification rarely has a number: a contact of the same name gives one, for a chat to open.
-                val known = c.number.takeIf { it.isNotBlank() }?.let { byNumber[numberKey(it)] } ?: byName[c.name.lowercase()]
+                val onWa =
+                    if (c.pkg != WHATSAPP) {
+                        null
+                    } else {
+                        c.number.takeIf { it.isNotBlank() }?.let { waByDigits[numberKey(it)] } ?: waByName[c.name.lowercase()]?.singleOrNull()
+                    }
+                val known = onWa?.let { w -> people.firstOrNull { it.id == w.contact } } ?: c.number.takeIf { it.isNotBlank() }?.let { byNumber[numberKey(it)] }
+                    ?: if (c.pkg == WHATSAPP) null else byName[c.name.lowercase()]
+                val number = onWa?.let { "+${it.digits}" } ?: c.number.ifBlank { known?.numbers?.singleOrNull().orEmpty() }
                 rows += c.start to entry(
-                    id = "voip:${c.id}", pkg = c.pkg, app = labels[c.pkg], direction = c.direction, name = known?.name ?: c.name,
-                    number = c.number.ifBlank { known?.numbers?.firstOrNull().orEmpty() }, video = c.video, start = c.start, duration = c.duration,
-                    voip = true, contact = known?.id,
+                    id = "voip:${c.id}", pkg = c.pkg, app = labels[c.pkg], direction = c.direction, name = known?.name ?: onWa?.name ?: c.name,
+                    number = number, video = c.video, start = c.start, duration = c.duration,
+                    voip = true, contact = known?.id ?: onWa?.contact, callable = onWa != null,
                 )
             }
         }
@@ -245,7 +299,7 @@ class PhoneCalls(
                     id = "log:${cursor.getLong(0)}", pkg = dialer, app = "phone", direction = direction,
                     name = known?.name ?: cursor.getString(2).orEmpty(), number = number,
                     video = cursor.getInt(6) and CallLog.Calls.FEATURES_VIDEO != 0, start = start, duration = cursor.getLong(5),
-                    voip = false, contact = known?.id,
+                    voip = false, contact = known?.id, callable = number.any(Char::isDigit),
                 )
             }
         }
@@ -264,6 +318,7 @@ class PhoneCalls(
         duration: Long,
         voip: Boolean,
         contact: Long?,
+        callable: Boolean,
     ): Value =
         Obj(
             mapOf(
@@ -279,6 +334,7 @@ class PhoneCalls(
                 "start" to Num(start / 1000.0),
                 "duration" to Num(duration.toDouble()),
                 "voip" to bool(voip),
+                "callable" to bool(callable),
                 "contact" to Str(contact?.toString().orEmpty()),
             ),
         )
@@ -319,6 +375,8 @@ class PhoneCalls(
         const val MAX_CALLS = 500
         const val MAX_CONTACTS = 5000
         const val WHATSAPP = "com.whatsapp"
+        private const val WA_VOICE = "vnd.android.cursor.item/vnd.com.whatsapp.voip.call"
+        private const val WA_VIDEO = "vnd.android.cursor.item/vnd.com.whatsapp.video.call"
 
         /** in, out or missed for each of the call log's types; voicemail, blocked and the rest aren't calls to list. */
         private val DIRECTION =
