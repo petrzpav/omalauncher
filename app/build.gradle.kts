@@ -149,3 +149,13 @@ dependencies {
     // android.jar only has stubs of org.json.
     testImplementation(libs.org.json)
 }
+
+// petrzpav's fork: the foss build is dev.omalauncher.pavel, an app of its own beside the launcher from Play, and
+// .github/workflows/fork.yml numbers each build with -PforkBuild=<run>, so a newer one installs over the last.
+android {
+    productFlavors.getByName("foss").applicationIdSuffix = ".pavel"
+    providers.gradleProperty("forkBuild").orNull?.toInt()?.let { n ->
+        defaultConfig.versionCode = defaultConfig.versionCode!! * 1000 + n
+        defaultConfig.versionName = "${defaultConfig.versionName}-pavel.$n"
+    }
+}
