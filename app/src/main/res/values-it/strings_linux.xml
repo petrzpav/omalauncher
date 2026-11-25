@@ -144,6 +144,8 @@
     <string name="linux_notification_channel">Sessione Linux</string>
     <string name="linux_notify_channel">Agenti e script</string>
     <string name="linux_media_channel">Riproduzione da Linux</string>
+    <string name="linux_media_rewind">Indietro di %1$d secondi</string>
+    <string name="linux_media_forward">Avanti di %1$d secondi</string>
     <string name="linux_notification_installing">Installazione di Linux · %1$s</string>
     <string name="linux_notification_installing_percent">Installazione di Linux · %1$d%% · %2$s</string>
     <string name="linux_notification_failed">Configurazione di Linux interrotta · apri impostazioni › linux per riprovare</string>

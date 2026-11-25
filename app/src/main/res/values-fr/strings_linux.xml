@@ -144,6 +144,8 @@
     <string name="linux_notification_channel">Session Linux</string>
     <string name="linux_notify_channel">Agents et scripts</string>
     <string name="linux_media_channel">Lecture depuis Linux</string>
+    <string name="linux_media_rewind">Reculer de %1$d secondes</string>
+    <string name="linux_media_forward">Avancer de %1$d secondes</string>
     <string name="linux_notification_installing">Installation de Linux · %1$s</string>
     <string name="linux_notification_installing_percent">Installation de Linux · %1$d %% · %2$s</string>
     <string name="linux_notification_failed">Installation de Linux arrêtée · ouvre paramètres › linux pour réessayer</string>

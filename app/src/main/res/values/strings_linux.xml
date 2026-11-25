@@ -186,6 +186,9 @@
     <string name="linux_notify_channel">Agents and scripts</string>
     <!-- Name of the notification channel for what a Linux player shows in Android's media controls with `omalauncher media`, shown in Android's notification settings. -->
     <string name="linux_media_channel">Playing from Linux</string>
+    <!-- The media controls' buttons that jump back and forward within the track (Android Auto, lock screen), read out by TalkBack; %1$d is the seconds. -->
+    <string name="linux_media_rewind">Back %1$d seconds</string>
+    <string name="linux_media_forward">Forward %1$d seconds</string>
     <!-- %1$s: the install's phase (download arch linux). -->
     <string name="linux_notification_installing">Installing Linux · %1$s</string>
     <!-- %1$d: percent done, %2$s: the install's phase (download arch linux). -->

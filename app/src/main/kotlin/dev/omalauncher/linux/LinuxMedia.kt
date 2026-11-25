@@ -333,8 +333,13 @@ class LinuxMedia(
             .Builder()
             .apply {
                 // Android Auto, the lock screen and the shade's player (Android 13+) show these beside the others.
-                if ("rewind" in acts) addCustomAction(PlaybackState.CustomAction.Builder("rewind", "−$step s", android.R.drawable.ic_media_rew).build())
-                if ("forward" in acts) addCustomAction(PlaybackState.CustomAction.Builder("forward", "+$step s", android.R.drawable.ic_media_ff).build())
+                // A circled arrow with the seconds in it, as podcast players have, not ◀◀ ▶▶ (that's scanning).
+                if ("rewind" in acts) {
+                    addCustomAction(PlaybackState.CustomAction.Builder("rewind", context.getString(R.string.linux_media_rewind, step), skipIcon(back = true, step)).build())
+                }
+                if ("forward" in acts) {
+                    addCustomAction(PlaybackState.CustomAction.Builder("forward", context.getString(R.string.linux_media_forward, step), skipIcon(back = false, step)).build())
+                }
             }
             .setState(
                 if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
@@ -353,11 +358,11 @@ class LinuxMedia(
         val acts = actions(v)
         val buttons =
             listOfNotNull(
-                "previous".takeIf { it in acts }?.let { button(it, android.R.drawable.ic_media_previous) },
-                "rewind".takeIf { it in acts }?.let { button(it, android.R.drawable.ic_media_rew) },
-                (if (playing) "pause" else "play").takeIf { it in acts }?.let { button(it, if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play) },
-                "forward".takeIf { it in acts }?.let { button(it, android.R.drawable.ic_media_ff) },
-                "next".takeIf { it in acts }?.let { button(it, android.R.drawable.ic_media_next) },
+                "previous".takeIf { it in acts }?.let { button(it, R.drawable.ic_linux_media_previous) },
+                "rewind".takeIf { it in acts }?.let { button(it, skipIcon(back = true, skip(v))) },
+                (if (playing) "pause" else "play").takeIf { it in acts }?.let { button(it, if (playing) R.drawable.ic_linux_media_pause else R.drawable.ic_linux_media_play) },
+                "forward".takeIf { it in acts }?.let { button(it, skipIcon(back = false, skip(v))) },
+                "next".takeIf { it in acts }?.let { button(it, R.drawable.ic_linux_media_next) },
             )
         // The small player before Android 13 has room for three: play or pause with what's either side of it.
         val middle = buttons.indexOfFirst { it.title == "play" || it.title == "pause" }
@@ -451,6 +456,19 @@ class LinuxMedia(
 
         /** The step buttons (petrzpav's fork): a press runs `<command> rewind|forward <skip>`. */
         val SKIPS = setOf("rewind", "forward")
+
+        /** Media3's icons (Apache-2.0, res/drawable/ic_linux_media_*): the step's number in them for 5, 10, 15 and 30 s. */
+        fun skipIcon(
+            back: Boolean,
+            step: Long,
+        ): Int =
+            when (step) {
+                5L -> if (back) R.drawable.ic_linux_media_skip_back_5 else R.drawable.ic_linux_media_skip_forward_5
+                10L -> if (back) R.drawable.ic_linux_media_skip_back_10 else R.drawable.ic_linux_media_skip_forward_10
+                15L -> if (back) R.drawable.ic_linux_media_skip_back_15 else R.drawable.ic_linux_media_skip_forward_15
+                30L -> if (back) R.drawable.ic_linux_media_skip_back_30 else R.drawable.ic_linux_media_skip_forward_30
+                else -> if (back) R.drawable.ic_linux_media_skip_back else R.drawable.ic_linux_media_skip_forward
+            }
 
         /** The step of rewind and forward, in whole seconds: the set's `skip`, else 30. */
         fun skip(v: Obj): Long = (v.num("skip") ?: 30.0).toLong().coerceIn(1, 3600)
