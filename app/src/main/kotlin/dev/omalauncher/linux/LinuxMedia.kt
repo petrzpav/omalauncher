@@ -119,6 +119,20 @@ class LinuxMedia(
         return MediaBrowser.MediaItem(description, if ("play" in actions(v)) MediaBrowser.MediaItem.FLAG_PLAYABLE else 0)
     }
 
+    /**
+     * Linux stopping or removed ([clear] with forget): a set the bridge sends in its last moments would only bring the
+     * player back. [open] when Linux is up again.
+     */
+    private var closed = false
+
+    /** Linux is up: sets are taken again. */
+    fun open() {
+        closed = false
+    }
+
+    /** A play of the track from before a stop that's under way: a second tap doesn't start the player twice. */
+    private var playLastJob: Job? = null
+
     /** What was set before the last clear, for the car's list: see [item]. */
     private var last: Obj? = null
     private var lastArt: Bitmap? = null
@@ -127,7 +141,8 @@ class LinuxMedia(
     private fun playLast() {
         val v = last ?: return
         val command = v.str("command")?.takeIf { "play" in actions(v) } ?: return
-        scope.launch(Dispatchers.IO) {
+        if (playLastJob?.isActive == true) return
+        playLastJob = scope.launch(Dispatchers.IO) {
             val code = runCatching { proot.run("$command play") { Log.i(TAG, "[play last] $it") } }.getOrElse { -1 }
             if (code != 0) Log.w(TAG, "'$command play' exited $code")
         }
@@ -138,6 +153,7 @@ class LinuxMedia(
 
     /** Publishes [v] (merged into what's set unless it names a new track); the error to answer with, or null. */
     fun set(v: Obj): String? {
+        if (closed) return "media set: Linux is stopping"
         val bad = v.fields.keys - FIELDS
         if (bad.isNotEmpty()) return "media set: unknown ${bad.joinToString(", ")}; one of ${FIELDS.joinToString(", ")}"
         val next = if (v.fields.containsKey("title") || now == null) v else Obj(now!!.fields + v.fields)
@@ -166,6 +182,7 @@ class LinuxMedia(
         if (forget) {
             last = null
             lastArt = null
+            closed = true
         }
         now = null
         artJob?.cancel()

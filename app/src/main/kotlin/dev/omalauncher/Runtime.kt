@@ -482,6 +482,8 @@ class Runtime(
             terminalFont.write()
         }
         linux = true
+        // The Linux player may show in Android's media controls again (stopped Linux closed them).
+        linuxMedia.open()
         // A font picked from Linux that wasn't remembered at start (or was installed since) loads now.
         scope.launch { launcherFont.apply() }
         // The recent apps strip on home lists Linux apps before the app list is ever opened.
