@@ -123,7 +123,7 @@ app "phone" {
 
   // A key that calls [target] (a number, or a call or contact entry): busy for a moment once tapped, and deaf to a
   // second tap meanwhile, so a double tap places one call.
-  component CallKey(target, id, s = 44, solid = false, src = icCall) {
+  component CallKey(target, id, s = 44, solid = false, src = icCall, tint = green) {
     let busy = dialing && callId == id
     // The circle as drawn, in a bigger box to hit.
     Box {
@@ -131,7 +131,7 @@ app "phone" {
       height: s + 8
       align: center
       onTap: { if !dialing { haptic(); callAt = tick; callId = id; calls("call", target) } }
-      Round { src: src; tint: busy ? muted : green; s: s; solid: solid }
+      Round { src: src; tint: busy ? muted : tint; s: s; solid: solid }
     }
   }
 
@@ -250,8 +250,9 @@ app "phone" {
     let long = e.duration >= 3600 ? fmtTime(e.duration, "H:mm:ss", "UTC") : (e.duration >= 60 ? "${floor(e.duration / 60)}m ${pad(e.duration % 60, 2, "0")}s" : "${e.duration}s")
     let parts = [e.voip ? lower(e.app) : null, e.video ? "video" : null, fmtTime(e.start, "HH:mm"), isMissed ? "missed" : (e.duration > 0 ? long : (e.direction == "out" ? "no answer" : null))]
     let unfolded = open.indexOf(e.id) >= 0
-    // A private caller has nothing to call, message or save.
+    // A private caller has nothing to call, message or save; a call in another app without a number has only its app.
     let actionable = e.voip || e.number != ""
+    let foldable = e.number != "" || e.contact != ""
       fill: width
       gap: 0
       if header != "" {
@@ -264,8 +265,8 @@ app "phone" {
         align: center
         padding: [12, 0, 6, 0]
         background: unfolded ? alpha(muted, 0.08) : transparent
-        onTap: { if actionable { open = unfolded ? open.filter(x => x != e.id) : flatten([open, [e.id]], 1) } }
-        onLongPress: { if actionable { calls("contact", e) } }
+        onTap: { if foldable { open = unfolded ? open.filter(x => x != e.id) : flatten([open, [e.id]], 1) } }
+        onLongPress: { if foldable { calls("contact", e) } }
         // A call in another app shows that app; the phone's own show who.
         Avatar { name: e.name; app: e.voip ? e.icon : "" }
         Column {
@@ -282,17 +283,18 @@ app "phone" {
         }
         // The other side can be called back where there's a number, or its app can.
         if actionable {
-          CallKey { target: e; id: e.id; src: e.voip ? icOpen : icCall }
+          // Green calls; a call in another app can only be returned there, so its key opens that app, in accent.
+          CallKey { target: e; id: e.id; src: e.voip ? icOpen : icCall; tint: e.voip ? accent : green }
         }
       }
-      if unfolded {
+      if unfolded && foldable {
         Row {
           fill: width
           gap: 4
           padding: [12, 0, 12, 8]
           background: alpha(muted, 0.08)
           // No call here: the handset above calls, and a second tap landing here shouldn't call again.
-          if e.voip { Box { weight: 1; onTap: calls("open", e); Act { src: icOpen; word: lower(e.app) } } }
+          // The key above opens the app (WhatsApp on the chat with that number), so it isn't repeated here.
           if e.number != "" { Box { weight: 1; onTap: url("sms:" + enc(e.dial)); Act { src: icMessage; word: "message" } } }
           Box { weight: 1; onTap: calls("contact", e); Act { src: e.contact != "" ? icPerson : icAdd; word: e.contact != "" ? "contact" : "add contact" } }
           // A call in another app can still be returned on the phone, last, away from where the finger was.
@@ -350,7 +352,7 @@ app "phone" {
               height: 52
               gap: 8
               align: center
-              padding: [66, 0, 6, 0]
+              padding: [66, 0, len(p.numbers) > 1 ? 6 : 12, 0]
               Text { text: n; weight: 1; maxLines: 1 }
               Box { size: 44; align: center; radius: 22; onTap: url("sms:" + enc(p.dial[j])); Icon { src: icMessage; tint: foreground; s: 20 } }
               // One number is called from the handset above already.
@@ -421,16 +423,16 @@ app "phone" {
                 height: 56
                 gap: 8
                 align: center
-                padding: [12, 0, 0, 0]
+                padding: [12, 0, 12, 0]
                 background: alpha(yellow, 0.1)
                 Icon { src: icOpen; tint: yellow; s: 18 }
                 Text { text: "whatsapp & messenger calls need notification access"; style: small; color: yellow; weight: 1; maxLines: 2 }
                 Box {
+                  width: 72
                   height: 44
-                  padding: [10, 0]
                   align: center
                   onTap: { if !asking { haptic(); askedAt = tick; calls("request") } }
-                  Text { text: asking ? "asking…" : "allow"; style: small; color: asking ? muted : accent; maxLines: 1 }
+                  Text { text: asking ? "asking…" : "allow"; style: small; color: asking ? muted : accent; align: center; fill: width; maxLines: 1 }
                 }
                 Box { size: 44; align: center; onTap: voipHint = false; Text { text: "×"; fontSize: 22; color: muted; align: center; fill: width } }
               }
