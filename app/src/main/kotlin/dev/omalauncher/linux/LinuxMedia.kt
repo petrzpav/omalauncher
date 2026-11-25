@@ -37,6 +37,7 @@ import dev.omalauncher.widgets.lang.Str
 import dev.omalauncher.widgets.lang.Value
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -137,9 +138,17 @@ class LinuxMedia(
     private var skipping: String? = null
     private var skippingJob: Job? = null
 
-    /** When the last set came, and whether the player's pipe ([press]) went unanswered: then presses run its command. */
-    private var lastSetAt = 0L
+    /**
+     * Presses into the player's pipe are numbered; its reader sends each number back (`ack`). One left unanswered for
+     * [PIPE_ANSWER_MS] makes the pipe dead: presses run the command until a set with the pipe or an ack comes again.
+     */
+    private var pressNo = 0L
+    private var acked = 0L
     private var pipeDead = false
+
+    /** One press at a time into the pipe, in the order pressed. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val pipeIo = Dispatchers.IO.limitedParallelism(1)
 
     /** What was last handed to the session and the notification: unchanged, they aren't sent again. */
     private var metaKey: List<Any?>? = null
@@ -168,10 +177,15 @@ class LinuxMedia(
     fun current(): Value = now?.let { Obj(it.fields + ("position" to Num(position(it)))) } ?: Null
 
     /** Publishes [v] (merged into what's set unless it names a new track); the error to answer with, or null. */
-    fun set(v: Obj): String? {
+    fun set(given: Obj): String? {
         if (closed) return "media set: Linux is stopping"
-        val bad = v.fields.keys - FIELDS
+        val bad = given.fields.keys - FIELDS
         if (bad.isNotEmpty()) return "media set: unknown ${bad.joinToString(", ")}; one of ${FIELDS.joinToString(", ")}"
+        // A press the pipe's reader took ([deliver]): it's alive, whatever it does with it. Not kept with the track.
+        given.num("ack")?.let { acked = maxOf(acked, it.toLong()) }
+        if ("pipe" in given.fields || "ack" in given.fields) pipeDead = false
+        val v = Obj(given.fields - "ack")
+        if (v.fields.isEmpty()) return null
         val next = if (v.fields.containsKey("title") || now == null) v else Obj(now!!.fields + v.fields)
         if (next.str("title").isNullOrEmpty()) return "media set: a track needs a title"
         now = next
@@ -180,10 +194,10 @@ class LinuxMedia(
         if (v.fields.containsKey("title")) {
             last = null
             lastArt = null
-            skipping = null
         }
-        lastSetAt = SystemClock.elapsedRealtime()
-        pipeDead = false
+        // The player said where it is: next or previous is no longer under way.
+        skipping = null
+        skippingJob?.cancel()
         val listed = LISTED.any { it in v.fields }
         loadArt(next.str("art"))
         publish()
@@ -375,6 +389,8 @@ class LinuxMedia(
                     val to = position(v) + (second ?: skip(v)) * (if (word == "rewind") -1 else 1)
                     mapOf("position" to Num(to.coerceAtLeast(0.0).let { if (end != null) it.coerceAtMost(end) else it }))
                 }
+                // Where it is, held while it skips (the bar stays put rather than going back to the last set's place).
+                "next", "previous" -> mapOf("position" to Num(position(v)))
                 else -> emptyMap()
             }
         if (word == "next" || word == "previous") {
@@ -412,14 +428,14 @@ class LinuxMedia(
             runCommand(v, line)
             return
         }
-        val sentAt = SystemClock.elapsedRealtime()
-        scope.launch(Dispatchers.IO) {
+        val no = ++pressNo
+        scope.launch(pipeIo) {
             val written =
                 runCatching {
                     // Non-blocking: no reader is ENXIO at once, rather than an open that waits for one.
                     val fd = Os.open(pipe.path, OsConstants.O_WRONLY or OsConstants.O_NONBLOCK, 0)
                     try {
-                        val bytes = "$line\n".toByteArray()
+                        val bytes = "$line #$no\n".toByteArray()
                         Os.write(fd, bytes, 0, bytes.size) == bytes.size
                     } finally {
                         Os.close(fd)
@@ -432,11 +448,13 @@ class LinuxMedia(
                     return@withContext
                 }
                 delay(PIPE_ANSWER_MS)
-                if (lastSetAt < sentAt && now != null) {
-                    Log.w(TAG, "the player's pipe didn't answer '$line'; its command instead")
-                    pipeDead = true
-                    if (word in AGAIN_SAFE) runCommand(v, line)
-                }
+                // Its reader took it, or took a later one (then it's alive and this one is behind it): nothing to do.
+                if (acked >= no || now == null) return@withContext
+                Log.w(TAG, "the player's pipe didn't take '$line'; its command instead")
+                pipeDead = true
+                // Again through the command only if nothing was pressed since (a later press says what's wanted now),
+                // and only what does no harm done twice.
+                if (pressNo == no && word in AGAIN_SAFE) runCommand(v, line)
             }
         }
     }
@@ -636,7 +654,7 @@ class LinuxMedia(
         /** The step of rewind and forward, in whole seconds: the set's `skip`, else 30. */
         fun skip(v: Obj): Long = (v.num("skip") ?: 30.0).toLong().coerceIn(1, 3600)
         val DEFAULT_ACTIONS = listOf("play", "pause", "next", "previous", "seek")
-        val FIELDS = setOf("title", "artist", "album", "art", "duration", "position", "playing", "speed", "command", "actions", "skip", "pipe")
+        val FIELDS = setOf("title", "artist", "album", "art", "duration", "position", "playing", "speed", "command", "actions", "skip", "pipe", "ack")
 
         /** How long next or previous shows as skipping without the player's next track. */
         const val SKIPPING_MS = 3000L
