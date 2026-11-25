@@ -24,11 +24,15 @@ class LinuxMediaBrowserService : MediaBrowserService() {
         super.onDestroy()
     }
 
+    /**
+     * No root for System UI's media resumption (EXTRA_RECENT): its card would outlive `media clear`, with a play button
+     * that has no player to reach.
+     */
     override fun onGetRoot(
         clientPackageName: String,
         clientUid: Int,
         rootHints: Bundle?,
-    ): BrowserRoot = BrowserRoot(ROOT, null)
+    ): BrowserRoot? = if (rootHints?.getBoolean(BrowserRoot.EXTRA_RECENT) == true) null else BrowserRoot(ROOT, null)
 
     override fun onLoadChildren(
         parentId: String,

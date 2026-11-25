@@ -437,6 +437,11 @@
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
+            <!-- Voice "play … on Omalauncher" (Android Auto asks every media app for it): plays what's set. -->
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </service>
 
         <meta-data

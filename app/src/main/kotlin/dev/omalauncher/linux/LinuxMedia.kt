@@ -87,7 +87,8 @@ class LinuxMedia(
                 .setSubtitle(listOfNotNull(v.str("artist"), v.str("album")).distinct().joinToString(" · ").ifEmpty { null })
                 .setIconBitmap(art)
                 .build()
-        return MediaBrowser.MediaItem(description, MediaBrowser.MediaItem.FLAG_PLAYABLE)
+        // Playable only when a press reaches the player: tapping it in the car runs its command's play.
+        return MediaBrowser.MediaItem(description, if ("play" in actions(v)) MediaBrowser.MediaItem.FLAG_PLAYABLE else 0)
     }
 
     /** What's set, as `omalauncher media` shows it, the position as of now. */
@@ -101,10 +102,10 @@ class LinuxMedia(
         if (next.str("title").isNullOrEmpty()) return "media set: a track needs a title"
         now = next
         setAt = SystemClock.elapsedRealtime()
-        val newTrack = v.fields.containsKey("title")
+        val listed = LISTED.any { it in v.fields }
         loadArt(next.str("art"))
         publish()
-        if (newTrack) onChanged?.invoke()
+        if (listed) onChanged?.invoke()
         return null
     }
 
@@ -157,8 +158,16 @@ class LinuxMedia(
                         mediaId: String?,
                         extras: android.os.Bundle?,
                     ) = press("play")
+
+                    // "Play … on Omalauncher" from the car or the Assistant: there's only the one player to play.
+                    override fun onPlayFromSearch(
+                        query: String?,
+                        extras: android.os.Bundle?,
+                    ) = press("play")
                 },
             )
+            // Nothing until the first set, for the car's browser that has the session before anything plays.
+            s.setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_NONE, 0, 0f).build())
             session = s
             // The notification's buttons, where Android draws them from it rather than from the session (before 13).
             receiver = context.registerNotExported(IntentFilter(ACTION)) { intent -> intent.getStringExtra(EXTRA)?.let { press(it) } }
@@ -216,7 +225,10 @@ class LinuxMedia(
         val playing = v.bool("playing") == true
         val acts = actions(v)
         var mask = 0L
-        if ("play" in acts) mask = mask or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PLAY_PAUSE
+        if ("play" in acts) {
+            mask = mask or PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PLAY_PAUSE or
+                PlaybackState.ACTION_PLAY_FROM_MEDIA_ID or PlaybackState.ACTION_PLAY_FROM_SEARCH
+        }
         if ("pause" in acts) mask = mask or PlaybackState.ACTION_PAUSE or PlaybackState.ACTION_PLAY_PAUSE
         if ("next" in acts) mask = mask or PlaybackState.ACTION_SKIP_TO_NEXT
         if ("previous" in acts) mask = mask or PlaybackState.ACTION_SKIP_TO_PREVIOUS
@@ -325,6 +337,9 @@ class LinuxMedia(
         const val ACTION = "dev.omalauncher.LINUX_MEDIA"
         const val EXTRA = "action"
         const val NOW_PLAYING = "now"
+
+        /** The fields the car's list shows: a set with any of them lists it again. */
+        val LISTED = setOf("title", "artist", "album", "art", "command", "actions")
         const val ART_PX = 512
         const val MAX_ART_BYTES = 8 shl 20
         val ACTIONS = listOf("play", "pause", "next", "previous", "seek", "stop")
