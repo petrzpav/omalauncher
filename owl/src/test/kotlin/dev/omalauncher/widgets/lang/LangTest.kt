@@ -1397,6 +1397,28 @@ class LangTest {
         assertEquals(listOf("sees calendar event titles, times and locations; check nothing sends them elsewhere"), Review.risks(p.commands).map { it.removePrefix("command ").substringBefore(": ") })
     }
 
+    @Test fun androidCallsAskedForOnATapAndCalledOnlyFromOne() {
+        val src = "app \"phone\" {\n meta { owl: 26 }\n source c = android.calls\n Column { if !c.granted { Text { text: \"allow\"; onTap: calls(\"request\") } }\n for e in c.calls key e.id { Text { text: e.name; onTap: calls(\"call\", e) } } } }"
+        val p = Compiler.compile(src)
+        assertEquals("android.calls", (p.globals.single() as Global.Source).kind)
+        assertEquals(listOf("read the phone's calls and contacts, once you allow it", "place phone calls when you tap"), p.commands)
+        assertTrue(compileError(src.replace("owl: 26", "owl: 25")).contains("needs owl 26"))
+        assertTrue(compileError(src.replace("\"request\"", "\"dial\"")).contains("calls takes request, call, open or contact"))
+        assertTrue(compileError(src.replace("calls(\"call\", e)", "calls(\"call\")")).contains("calls(\"call\", number)"))
+        // Asking and calling come only from a touch that has lifted, never a press or a trigger.
+        assertTrue(compileError(src.replace("onTap: calls(\"call\"", "onPress: calls(\"call\"")).contains("put it in onTap"))
+        assertTrue(compileError(src.replace(" Column {", " every 1m { calls(\"call\", \"123\") }\n Column {")).contains("not in a trigger"))
+        assertTrue(compileError(src.replace(" Column {", " every 1m { calls(\"request\") }\n Column {")).contains("not in a trigger"))
+        assertTrue(compileError(src.replace(" source c = android.calls\n", "").replace("!c.granted", "true").replace("for e in c.calls", "for e in []")).contains("declare it"))
+        // Opening an entry or a contact places no call, and can come from a long press too.
+        val open = Compiler.compile(src.replace("onTap: calls(\"call\", e)", "onTap: calls(\"open\", e); onLongPress: calls(\"contact\", e)"))
+        assertEquals(listOf("read the phone's calls and contacts, once you allow it"), open.commands)
+        assertEquals(
+            listOf("sees who you called and were called by, and your contacts; check nothing sends them elsewhere", "places phone calls as you; check which numbers it calls and when"),
+            Review.risks(p.commands).map { it.removePrefix("command ").substringBefore(": ") },
+        )
+    }
+
     @Test fun bluetoothBatteryAskedForOnATap() {
         val src = "widget {\n meta { owl: 25 }\n source v = android.volume\n Text { text: v.output.battery != null ? \"${'$'}{v.output.name} · ${'$'}{v.output.battery}%\" : v.output.name; onTap: volume(\"request\") } }"
         val p = Compiler.compile(src)

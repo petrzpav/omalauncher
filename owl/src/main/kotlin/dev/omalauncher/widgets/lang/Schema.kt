@@ -212,7 +212,9 @@ internal val SINCE =
         // owl 26 in this fork: the Linux windows open, to bring one back to the front.
         mapOf("android.windows" to 26) +
         // owl 26 in this fork: a notification of the widget's own, which Android counts down on the lock screen, and its buttons.
-        listOf(WIDGET_NOTIFICATION, "onNotification").associateWith { 26 }
+        listOf(WIDGET_NOTIFICATION, "onNotification").associateWith { 26 } +
+        // owl 26 in this fork: the phone's calls (its call log and other apps' calls) and contacts, for a phone app.
+        listOf("android.calls", "calls").associateWith { 26 }
 
 /** A Shader's `uniform shader name;`, an image it samples, named like this in [SINCE]. */
 internal const val SHADER_IMAGE = "uniform shader"
@@ -372,10 +374,10 @@ val SPEECH_ANYWHERE = setOf("stop", "cancel")
  * The android sources a widget asks Android's permission for, each with x("request") from a tap: never a press, before
  * the finger lifts, or a trigger, so a widget can't ask on its own. The compiler and WidgetInstance both check.
  */
-val ASKS = setOf("location", "calendar", "airpods", "volume")
+val ASKS = setOf("location", "calendar", "airpods", "volume", "calls")
 
 /** Data from the phone and the launcher; device is fixed, system, network and power are polled, the rest update as they change. */
-internal val ANDROID = setOf("battery", "device", "media", "notifications", "volume", "system", "network", "power", "sim", "alarm", "modes", "apps", "agents", "recent", "drawer", "modifiers", "speech", "location", "airpods", "calendar", "motion", "strip", "windows")
+internal val ANDROID = setOf("battery", "device", "media", "notifications", "volume", "system", "network", "power", "sim", "alarm", "modes", "apps", "agents", "recent", "drawer", "modifiers", "speech", "location", "airpods", "calendar", "motion", "strip", "windows", "calls")
 
 /**
  * The words an action's first value may be, when it's written out; [numbers] also allows a number. [forms] are the
@@ -389,6 +391,9 @@ internal class Words(
 )
 
 /** What the store's review lists for a widget that reads or changes AirPods, from the source or airpods(...). */
+/** What the store's review lists for a widget that reads android.calls. */
+internal const val CALLS_COMMAND = "read the phone's calls and contacts, once you allow it"
+
 internal const val AIRPODS_COMMAND = "read and change the AirPods connected to the phone over Bluetooth, once you allow it"
 
 /** AirPods' listening modes, as android.airpods' `mode` and `modes` name them. */
@@ -453,6 +458,19 @@ internal val ACTION_WORDS =
                 setOf("request", "open"),
                 "calendar takes request or open; the events are in source x = android.calendar",
                 forms = mapOf("request" to (1..1 to "calendar(\"request\")"), "open" to (1..2 to "calendar(\"open\"), or calendar(\"open\", event)")),
+            ),
+        // owl 26 in this fork: calls("call", n) places a call, so only from onTap; the compiler and WidgetInstance check.
+        "calls" to
+            Words(
+                setOf("request", "call", "open", "contact"),
+                "calls takes request, call, open or contact; the calls and contacts are in source x = android.calls",
+                forms =
+                    mapOf(
+                        "request" to (1..1 to "calls(\"request\")"),
+                        "call" to (2..2 to "calls(\"call\", number), or calls(\"call\", entry)"),
+                        "open" to (2..2 to "calls(\"open\", entry)"),
+                        "contact" to (2..2 to "calls(\"contact\", entry), or calls(\"contact\", number)"),
+                    ),
             ),
         // owl 18: where a Browser goes, or how it loads where it is.
         "web" to setOf("back", "forward", "reload", "stop").let { Words(it, "web takes ${it.joinToString()}") },

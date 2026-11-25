@@ -23,7 +23,8 @@ import dev.omalauncher.Runtime
  * [dev.omalauncher.widgets.runtime.Dictation]), the location for location("request") (see
  * [dev.omalauncher.widgets.runtime.PhoneLocation]), calendar for calendar("request") (see
  * [dev.omalauncher.widgets.runtime.PhoneCalendar]), Bluetooth for airpods(...) and volume("request") (see
- * [dev.omalauncher.widgets.runtime.AirPods] and [dev.omalauncher.widgets.runtime.Volume]). Each activity that shows widgets has one of each, in its [WidgetAsks], made
+ * [dev.omalauncher.widgets.runtime.AirPods] and [dev.omalauncher.widgets.runtime.Volume]), and the call log, contacts and
+ * calling for calls("request") (see [dev.omalauncher.widgets.runtime.PhoneCalls]). Each activity that shows widgets has one of each, in its [WidgetAsks], made
  * with it, as a launcher must be registered before the activity starts. With [orSettings], a tap once Android won't show its dialog
  * any more opens the app's own settings, where the switch then is, so the tap still does something.
  */
@@ -125,6 +126,11 @@ class WidgetAsks(
     private val place = AskPermission(activity, Manifest.permission.ACCESS_COARSE_LOCATION, orSettings = true)
     private val calendar = AskPermission(activity, Manifest.permission.READ_CALENDAR, orSettings = true)
 
+    // calls("request") asks for the three one after another; only the call log opens settings once Android won't ask.
+    private val callLog = AskPermission(activity, Manifest.permission.READ_CALL_LOG, orSettings = true)
+    private val contacts = AskPermission(activity, Manifest.permission.READ_CONTACTS)
+    private val calling = AskPermission(activity, Manifest.permission.CALL_PHONE)
+
     // Asked for only from Android 12 on: before it, an install-time permission covers AirPods, which then never ask.
     @SuppressLint("InlinedApi")
     private val bluetooth = AskPermission(activity, Manifest.permission.BLUETOOTH_CONNECT, orSettings = true)
@@ -139,6 +145,18 @@ class WidgetAsks(
         runtime.widgets.airpods.recheck()
         runtime.widgets.volume.ask = bluetooth::ask
         runtime.widgets.volume.recheck()
+        runtime.widgets.calls.ask = ::askCalls
+        runtime.widgets.calls.recheck()
+    }
+
+    private fun askCalls(
+        permission: String,
+        then: (Boolean) -> Unit,
+    ) = when (permission) {
+        Manifest.permission.READ_CALL_LOG -> callLog.ask(then)
+        Manifest.permission.READ_CONTACTS -> contacts.ask(then)
+        Manifest.permission.CALL_PHONE -> calling.ask(then)
+        else -> then(false)
     }
 
     fun paused(runtime: Runtime) {
@@ -147,5 +165,6 @@ class WidgetAsks(
         runtime.calendar.ask = null
         runtime.widgets.airpods.ask = null
         runtime.widgets.volume.ask = null
+        runtime.widgets.calls.ask = null
     }
 }

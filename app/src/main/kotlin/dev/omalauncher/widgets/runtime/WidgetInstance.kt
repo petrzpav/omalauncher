@@ -607,7 +607,9 @@ class WidgetInstance(
         // An agent or an app opening on its own, from a timer or a fetched value, over whatever the user is doing: like
         // sound(...), a trigger does it only while the app or screen is open.
         val key = args.firstOrNull().textOrNull()
-        if ((name == "ask" || name == "open" || (name == "calendar" && key == "open")) && inTrigger && !foreground()) return report("$name(...) in a trigger works only while the app or screen is open")
+        if ((name == "ask" || name == "open" || (name == "calendar" && key == "open") || (name == "calls" && (key == "open" || key == "contact"))) && inTrigger && !foreground()) return report("$name(...) in a trigger works only while the app or screen is open")
+        // A phone call goes out as you: only from a touch.
+        if (name == "calls" && key == "call" && inTrigger) return report("calls(\"call\", …) works in onTap, not in a trigger")
         // Keys go to whatever window has the keyboard: only from a touch, never on a timer or a fetched value. Or from
         // what the user just said, to this widget's dictation a tap started: on said.final { typeText(value) }.
         if ((name == "pressKey" || name == "typeText" || name == "latch") && inTrigger && !byDictation) {

@@ -979,6 +979,7 @@ class Compiler private constructor(
                 if (e.name == "speech") commands += "listen through the microphone after a tap, and read what you say"
                 if (e.name == "location") commands += "read the phone's approximate location, once you allow it"
                 if (e.name == "calendar") commands += "read events in the phone's calendars, once you allow it"
+                if (e.name == "calls") commands += CALLS_COMMAND
                 if (e.name == "airpods") commands += AIRPODS_COMMAND
                 if (e.name == "motion") commands += "read how the phone is tilted while it shows"
                 if (e.name == "windows") commands += "read the open Linux windows (names and titles)"
@@ -1569,6 +1570,12 @@ class Compiler private constructor(
                     if (TriggerKind.entries.any { it.word == handlerName } && word != null && word !in SPEECH_ANYWHERE) fail("speech(\"$word\") works in onTap, not in a trigger; stop and cancel work anywhere", call.pos)
                 }
                 if (call.name == "airpods") commands += AIRPODS_COMMAND
+                if (call.name == "calls" && (args[0].const as? Str)?.v.let { it == "call" || it == null }) {
+                    // A call goes out as you: only for a touch, after the finger lifts, never on a timer or a fetched value.
+                    if (handlerName == "onPress" || handlerName == "onRelease") fail("calls(\"call\", …) places a phone call over the widget before the finger lifts: put it in onTap", call.pos)
+                    if (TriggerKind.entries.any { it.word == handlerName }) fail("calls(\"call\", …) places a phone call, so it works in onTap, not in a trigger", call.pos)
+                    commands += "place phone calls when you tap"
+                }
                 if (call.name in ASKS && (args.getOrNull(0)?.const as? Str)?.v == "request") {
                     val ask = "${call.name}(\"request\")"
                     // Asking for what nothing reads: what it allows is only in the source.

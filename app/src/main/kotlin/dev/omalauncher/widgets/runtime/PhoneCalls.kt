@@ -1,0 +1,331 @@
+package dev.omalauncher.widgets.runtime
+
+import android.Manifest
+import android.content.ContentUris
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.provider.CallLog
+import android.provider.ContactsContract
+import android.telecom.TelecomManager
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import dev.omalauncher.apps.AppLabels
+import dev.omalauncher.system.changeObserver
+import dev.omalauncher.system.hasPermission
+import dev.omalauncher.widgets.lang.Lst
+import dev.omalauncher.widgets.lang.Num
+import dev.omalauncher.widgets.lang.Obj
+import dev.omalauncher.widgets.lang.Str
+import dev.omalauncher.widgets.lang.Value
+import dev.omalauncher.widgets.lang.bool
+import dev.omalauncher.widgets.lang.textOrNull
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.withContext
+
+/**
+ * The phone's calls and contacts, for widgets and owl apps: `source c = android.calls`, and `calls("request")`,
+ * `calls("call", n)`, `calls("open", e)` and `calls("contact", x)`. The call log (READ_CALL_LOG) and the contacts
+ * (READ_CONTACTS) are only read once a tap's calls("request") allowed them, and calls in other apps, WhatsApp and the
+ * like, only kept from then on ([VoipCalls]). Read while a widget showing them is on screen, like every android source.
+ */
+class PhoneCalls(
+    private val context: Context,
+    private val media: Media,
+) {
+    /** Asks the activity in front for [permission], then says whether it was granted; set as it resumes. */
+    var ask: ((permission: String, granted: (Boolean) -> Unit) -> Unit)? = null
+
+    private var log by mutableStateOf(check(Manifest.permission.READ_CALL_LOG))
+    private var contacts by mutableStateOf(check(Manifest.permission.READ_CONTACTS))
+    private var calling by mutableStateOf(check(Manifest.permission.CALL_PHONE))
+
+    /** Bumped as an activity resumes, since notification access is given in Android's settings, not here. */
+    private var resumed by mutableIntStateOf(0)
+
+    private val labels = AppLabels(context)
+
+    private fun check(permission: String) = context.hasPermission(permission)
+
+    fun recheck() {
+        log = check(Manifest.permission.READ_CALL_LOG)
+        contacts = check(Manifest.permission.READ_CONTACTS)
+        calling = check(Manifest.permission.CALL_PHONE)
+        resumed++
+    }
+
+    /**
+     * calls("request") from a tap: from now on calls in other apps are kept, then Android's dialogs for the call log,
+     * the contacts and placing calls, each one not yet allowed, one after another; then notification access, which
+     * those calls are seen through, if it's missing.
+     */
+    fun request() {
+        VoipCalls.record(context)
+        recheck()
+        val missing = listOf(Manifest.permission.READ_CALL_LOG, Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE).filterNot(::check)
+        val ask = ask
+        // A preview or a widget behind another app has no activity to ask from.
+        if (missing.isEmpty() || ask == null) return accessThen()
+
+        fun next(i: Int) {
+            if (i == missing.size) return accessThen()
+            ask(missing[i]) {
+                recheck()
+                next(i + 1)
+            }
+        }
+        next(0)
+    }
+
+    private fun accessThen() {
+        recheck()
+        if (!media.granted) runCatching { media.openAccessSettings() }
+    }
+
+    /**
+     * calls("call", n): a phone call to [target], a number or an entry of calls or contacts (its first number). Placed at
+     * once where placing calls is allowed, else the dialer opens with the number to press call; a call in another app
+     * opens that app instead, as only it can call back.
+     */
+    fun call(target: Value?) {
+        val entry = target as? Obj
+        if (entry != null && entry.fields["voip"] == bool(true)) return open(entry)
+        val number = numberOf(target) ?: return
+        val uri = Uri.fromParts("tel", number, null)
+        val intent = Intent(if (calling) Intent.ACTION_CALL else Intent.ACTION_DIAL, uri)
+        start(intent) || start(Intent(Intent.ACTION_DIAL, uri))
+    }
+
+    /**
+     * calls("open", e): an entry of calls in the app it was made in: a phone call's number in the dialer, without
+     * calling, and a call in another app that app, on the chat with its number where it has one (WhatsApp's wa.me).
+     */
+    fun open(target: Value?) {
+        val entry = target as? Obj
+        val pkg = entry?.fields?.get("package").textOrNull()
+        if (entry?.fields?.get("voip") == bool(true) && pkg != null) {
+            val digits = entry.fields["number"].textOrNull()?.filter(Char::isDigit).orEmpty()
+            if (pkg == WHATSAPP && digits.length >= 7 && start(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$digits")).setPackage(pkg))) return
+            context.packageManager.getLaunchIntentForPackage(pkg)?.let { start(it) }
+            return
+        }
+        val number = numberOf(target) ?: return
+        start(Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", number, null)))
+    }
+
+    /**
+     * calls("contact", x): the contacts app on a contact (one from contacts, or an entry of calls for a known number),
+     * or offering to add a number it doesn't know.
+     */
+    fun contact(target: Value?) {
+        val entry = target as? Obj
+        val id = entry?.fields?.get("contact").textOrNull()?.toLongOrNull()
+        if (id != null) {
+            start(Intent(Intent.ACTION_VIEW, ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI, id)))
+            return
+        }
+        val number = numberOf(target) ?: return
+        start(Intent(ContactsContract.Intents.SHOW_OR_CREATE_CONTACT, Uri.fromParts("tel", number, null)))
+    }
+
+    private fun numberOf(target: Value?): String? {
+        val entry = target as? Obj
+        val number =
+            when {
+                entry == null -> target.textOrNull()
+                entry.fields["numbers"] is Lst -> (entry.fields["numbers"] as Lst).items.firstOrNull().textOrNull()
+                else -> entry.fields["number"].textOrNull()
+            }
+        return number?.trim()?.takeIf { n -> n.any(Char::isDigit) }
+    }
+
+    /** Started from the launcher in front; false where nothing handles it, which mustn't crash the launcher. */
+    private fun start(intent: Intent): Boolean = runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+
+    /** android.calls: {granted, contactsGranted, canCall, voip, calls, contacts}, the lists empty until each is allowed. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun updates(): Flow<Value> =
+        snapshotFlow { Grants(log, contacts, calling, resumed) }.flatMapLatest { g ->
+            changes(g).mapLatest {
+                // Provider queries can block; never on the UI thread. A grant can be taken back at any time.
+                withContext(Dispatchers.IO) { value(g) }
+            }.catch { if (it is SecurityException) emit(value(Grants(false, false, calling, resumed))) else throw it }
+        }.distinctUntilChanged()
+
+    private data class Grants(
+        val log: Boolean,
+        val contacts: Boolean,
+        val calling: Boolean,
+        val resumed: Int,
+    )
+
+    /** The call log, the contacts and the calls kept from other apps, as each changes. */
+    private fun changes(g: Grants): Flow<Unit> =
+        callbackFlow {
+            val resolver = context.contentResolver
+            val observer = changeObserver(Handler(Looper.getMainLooper())) { trySend(Unit) }
+            // Without the permission there's nothing to watch, and some Androids refuse to watch it.
+            if (g.log) runCatching { resolver.registerContentObserver(CallLog.Calls.CONTENT_URI, true, observer) }
+            if (g.contacts) runCatching { resolver.registerContentObserver(ContactsContract.Contacts.CONTENT_URI, true, observer) }
+            val voip = VoipCalls.changes.onEach { trySend(Unit) }.launchIn(this)
+            trySend(Unit)
+            awaitClose {
+                voip.cancel()
+                resolver.unregisterContentObserver(observer)
+            }
+        }.conflate()
+
+    private fun value(g: Grants): Value {
+        val people = if (g.contacts) runCatching { people() }.getOrDefault(emptyList()) else emptyList()
+        val byNumber = HashMap<String, Person>()
+        val byName = HashMap<String, Person>()
+        for (p in people) {
+            for (n in p.numbers) byNumber.putIfAbsent(numberKey(n), p)
+            byName.putIfAbsent(p.name.lowercase(), p)
+        }
+        val dialer = runCatching { context.getSystemService(TelecomManager::class.java)?.defaultDialerPackage }.getOrNull().orEmpty()
+        val rows = ArrayList<Pair<Long, Value>>()
+        if (g.log) runCatching { rows += logged(dialer, byNumber) }
+        val recording = VoipCalls.recording(context)
+        if (recording) {
+            for (c in VoipCalls.all(context)) {
+                // The app's notification rarely has a number: a contact of the same name gives one, for a chat to open.
+                val known = c.number.takeIf { it.isNotBlank() }?.let { byNumber[numberKey(it)] } ?: byName[c.name.lowercase()]
+                rows += c.start to entry(
+                    id = "voip:${c.id}", pkg = c.pkg, app = labels[c.pkg], direction = c.direction, name = known?.name ?: c.name,
+                    number = c.number.ifBlank { known?.numbers?.firstOrNull().orEmpty() }, video = c.video, start = c.start, duration = c.duration,
+                    voip = true, contact = known?.id,
+                )
+            }
+        }
+        val calls = rows.sortedByDescending { it.first }.take(MAX_CALLS).map { it.second }
+        return Obj(
+            mapOf(
+                "granted" to bool(g.log),
+                "contactsGranted" to bool(g.contacts),
+                "canCall" to bool(g.calling),
+                "voip" to bool(recording && media.granted),
+                "calls" to Lst(calls),
+                "contacts" to Lst(people.map { it.value }),
+            ),
+        )
+    }
+
+    /** The newest [MAX_CALLS] of the call log, named from the contacts where the log has no name (imported ones). */
+    private fun logged(
+        dialer: String,
+        byNumber: Map<String, Person>,
+    ): List<Pair<Long, Value>> {
+        val out = ArrayList<Pair<Long, Value>>()
+        val uri = CallLog.Calls.CONTENT_URI.buildUpon().appendQueryParameter(CallLog.Calls.LIMIT_PARAM_KEY, MAX_CALLS.toString()).build()
+        val projection = arrayOf(CallLog.Calls._ID, CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME, CallLog.Calls.TYPE, CallLog.Calls.DATE, CallLog.Calls.DURATION, CallLog.Calls.FEATURES)
+        context.contentResolver.query(uri, projection, null, null, "${CallLog.Calls.DATE} DESC")?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val direction = DIRECTION[cursor.getInt(3)] ?: continue
+                val number = cursor.getString(1).orEmpty()
+                val known = number.takeIf { it.isNotBlank() }?.let { byNumber[numberKey(it)] }
+                val start = cursor.getLong(4)
+                out += start to entry(
+                    id = "log:${cursor.getLong(0)}", pkg = dialer, app = "phone", direction = direction,
+                    name = known?.name ?: cursor.getString(2).orEmpty(), number = number,
+                    video = cursor.getInt(6) and CallLog.Calls.FEATURES_VIDEO != 0, start = start, duration = cursor.getLong(5),
+                    voip = false, contact = known?.id,
+                )
+            }
+        }
+        return out
+    }
+
+    private fun entry(
+        id: String,
+        pkg: String,
+        app: String,
+        direction: String,
+        name: String,
+        number: String,
+        video: Boolean,
+        start: Long,
+        duration: Long,
+        voip: Boolean,
+        contact: Long?,
+    ): Value =
+        Obj(
+            mapOf(
+                "id" to Str(id),
+                "app" to Str(app),
+                "package" to Str(pkg),
+                "icon" to Str(if (pkg.isEmpty()) "" else "app:$pkg"),
+                "direction" to Str(direction),
+                "name" to Str(name),
+                "number" to Str(number),
+                "video" to bool(video),
+                "start" to Num(start / 1000.0),
+                "duration" to Num(duration.toDouble()),
+                "voip" to bool(voip),
+                "contact" to Str(contact?.toString().orEmpty()),
+            ),
+        )
+
+    private class Person(
+        val id: Long,
+        val name: String,
+        val numbers: List<String>,
+        val starred: Boolean,
+    ) {
+        val value: Value
+            get() = Obj(mapOf("contact" to Str(id.toString()), "name" to Str(name), "numbers" to Lst(numbers.map(::Str)), "starred" to bool(starred)))
+    }
+
+    /** Every contact with a phone number, by name, each number once however it's written. */
+    private fun people(): List<Person> {
+        val byId = LinkedHashMap<Long, Triple<String, Boolean, LinkedHashMap<String, String>>>()
+        val projection = arrayOf(ContactsContract.CommonDataKinds.Phone.CONTACT_ID, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY, ContactsContract.CommonDataKinds.Phone.NUMBER, ContactsContract.CommonDataKinds.Phone.STARRED)
+        context.contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, projection, null, null, "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY} COLLATE LOCALIZED ASC")?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val number = cursor.getString(2)?.trim()?.takeIf { n -> n.any(Char::isDigit) } ?: continue
+                val (_, _, numbers) = byId.getOrPut(cursor.getLong(0)) { Triple(cursor.getString(1).orEmpty(), cursor.getInt(3) != 0, LinkedHashMap()) }
+                numbers.putIfAbsent(numberKey(number), number)
+            }
+        }
+        return byId.map { (id, t) -> Person(id, t.first, t.third.values.toList(), t.second) }.filter { it.name.isNotBlank() }.take(MAX_CONTACTS)
+    }
+
+    companion object {
+        /** The newest calls listed, the phone's and other apps' together. */
+        const val MAX_CALLS = 500
+        const val MAX_CONTACTS = 5000
+        const val WHATSAPP = "com.whatsapp"
+
+        /** in, out or missed for each of the call log's types; voicemail, blocked and the rest aren't calls to list. */
+        private val DIRECTION =
+            mapOf(
+                CallLog.Calls.INCOMING_TYPE to "in",
+                CallLog.Calls.OUTGOING_TYPE to "out",
+                CallLog.Calls.MISSED_TYPE to "missed",
+                CallLog.Calls.REJECTED_TYPE to "missed",
+                CallLog.Calls.ANSWERED_EXTERNALLY_TYPE to "in",
+            )
+
+        /**
+         * One number however it's written: +420 777 123 456, 777123456 and 00420777123456 are the same. Its last nine
+         * digits, which is a whole national number in much of Europe and tells numbers apart well enough elsewhere.
+         */
+        fun numberKey(number: String): String = number.filter(Char::isDigit).takeLast(9)
+    }
+}
