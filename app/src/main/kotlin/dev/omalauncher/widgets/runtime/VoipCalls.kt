@@ -3,6 +3,7 @@ package dev.omalauncher.widgets.runtime
 import android.app.Notification
 import android.app.Person
 import android.content.Context
+import android.media.AudioManager
 import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -45,7 +46,8 @@ data class VoipCall(
  * lasts), from what was posted and removed and when. Pure, so the sequences are tested on the JVM. One call per app at a
  * time, keyed by app rather than by notification: apps ring and talk in different notifications, and the ringing one
  * may go before or after the ongoing one comes, so a call only ends once every one of its notifications has been gone
- * for [grace] ms.
+ * for [grace] ms. Nor while the phone's audio is in a call ([audio]): WhatsApp takes its call notification away while
+ * its own call screen is in front, so a call it shows there ends when the audio does.
  *
  * A call first seen ringing came in: answered once an ongoing one comes, missed if it ends without. A call first seen
  * ongoing went out, timed from then, as the notification can't say when the other side picked up.
@@ -66,6 +68,10 @@ class VoipTracker(
     )
 
     private val live = HashMap<String, Live>()
+
+    /** Whether the phone's audio is in a call now, and when it last left one. */
+    private var inCall = false
+    private var audioLeft = 0L
 
     /** Whether a call is under way or waiting out its grace, so the listener knows to come back for [due]. */
     val busy get() = live.isNotEmpty()
@@ -103,15 +109,27 @@ class VoipTracker(
         if (call.keys.isEmpty()) call.gone = now
     }
 
+    /** The phone's audio mode: [calling] while it's in a call or a VoIP call, as told at [now]. */
+    fun audio(
+        calling: Boolean,
+        now: Long,
+    ) {
+        if (inCall && !calling) audioLeft = now
+        inCall = calling
+    }
+
     /** The keys of every call notification still showing, for checking against Android's after the listener reconnects. */
     fun keys(): Set<String> = live.values.flatMapTo(HashSet()) { it.keys }
 
     /** The calls that have ended by [now], each once. */
     fun due(now: Long): List<VoipCall> {
-        val ended = live.values.filter { c -> c.gone?.let { now - it >= grace } == true }
+        if (inCall) return emptyList()
+        // Its notifications went, or the audio left the call after they did, whichever came later.
+        fun end(c: Live) = maxOf(c.gone!!, audioLeft)
+        val ended = live.values.filter { c -> c.gone != null && now - end(c) >= grace }
         for (c in ended) live.remove(c.pkg)
         return ended.map { c ->
-            val end = c.gone!!
+            val end = end(c)
             VoipCall(
                 pkg = c.pkg,
                 direction = if (!c.incoming) "out" else if (c.answered == null) "missed" else "in",
@@ -141,6 +159,9 @@ object VoipCalls {
 
     private val tracker = VoipTracker()
 
+    /** Follows the audio mode while a call is live, and keeps each call as it ends. On the worker, one at a time. */
+    private var watch: kotlinx.coroutines.Job? = null
+
     @Volatile
     private var calls: List<VoipCall>? = null
 
@@ -162,7 +183,10 @@ object VoipCalls {
         if (!recording(context)) return
         val call = callOf(context, sbn) ?: return
         val now = System.currentTimeMillis()
-        worker.launch { tracker.posted(sbn.packageName, sbn.key, call.ringing, call.name, call.number, call.video, now) }
+        worker.launch {
+            tracker.posted(sbn.packageName, sbn.key, call.ringing, call.name, call.number, call.video, now)
+            settle(context)
+        }
     }
 
     fun removed(
@@ -194,14 +218,27 @@ object VoipCalls {
         }
     }
 
-    /** Keeps the calls that ended, and comes back after the grace for one that's ending. On the worker. */
-    private suspend fun settle(context: Context) {
+    /**
+     * Keeps the calls that ended, and while one is live looks at the audio mode every [POLL_MS] until it ends: Android
+     * says nothing when an app's call ends with its notification already gone. On the worker.
+     */
+    private fun settle(context: Context) {
+        tracker.audio(calling(context), System.currentTimeMillis())
         keep(context, tracker.due(System.currentTimeMillis()))
-        if (tracker.busy) {
-            delay(VoipTracker.GRACE_MS + 100)
-            keep(context, tracker.due(System.currentTimeMillis()))
-        }
+        if (!tracker.busy || watch?.isActive == true) return
+        watch =
+            worker.launch {
+                while (tracker.busy) {
+                    delay(POLL_MS)
+                    tracker.audio(calling(context), System.currentTimeMillis())
+                    keep(context, tracker.due(System.currentTimeMillis()))
+                }
+            }
     }
+
+    /** Whether the phone's audio is in a call: the phone's own, or an app's VoIP call. Needs no permission. */
+    private fun calling(context: Context): Boolean =
+        runCatching { context.getSystemService(AudioManager::class.java)?.mode }.getOrNull() in IN_CALL_MODES
 
     private fun keep(
         context: Context,
@@ -288,6 +325,8 @@ object VoipCalls {
 
     private fun file(context: Context) = File(context.filesDir, "voip-calls.json")
 
+    private const val POLL_MS = 2_000L
+    private val IN_CALL_MODES = setOf(AudioManager.MODE_IN_CALL, AudioManager.MODE_IN_COMMUNICATION)
     private const val VERSION = 1
     private const val MAX = 1000
     private const val PREFS = "calls"

@@ -81,6 +81,31 @@ class VoipTrackerTest {
         assertEquals(listOf("out"), t.due(11_000).map { it.direction })
     }
 
+    @Test fun aCallWhoseNotificationHidesBehindItsScreenLastsAsLongAsTheAudio() {
+        val t = VoipTracker(grace = 4_000)
+        t.posted(wa, "out", ringing = false, name = "George", number = "", video = false, now = 0)
+        t.audio(calling = true, now = 1_000)
+        // WhatsApp's call screen comes to the front and its notification goes: the call goes on.
+        t.removed("out", now = 16_000)
+        assertTrue(t.due(30_000).isEmpty())
+        t.audio(calling = true, now = 600_000)
+        assertTrue(t.due(600_000).isEmpty())
+        // Hung up from that screen: the audio leaves the call, and the call ends there.
+        t.audio(calling = false, now = 900_000)
+        assertTrue(t.due(902_000).isEmpty())
+        val call = t.due(904_000).single()
+        assertEquals("out", call.direction)
+        assertEquals(900, call.duration)
+    }
+
+    @Test fun aRingingCallMissedWhileTheAudioIsIdleEndsWithItsNotification() {
+        val t = VoipTracker(grace = 4_000)
+        t.audio(calling = false, now = 0)
+        t.posted(wa, "ring", ringing = true, name = "Jana", number = "", video = false, now = 0)
+        t.removed("ring", now = 30_000)
+        assertEquals(listOf("missed"), t.due(34_000).map { it.direction })
+    }
+
     @Test fun anUnknownRemovalChangesNothing() {
         val t = VoipTracker(grace = 4_000)
         t.posted(wa, "a", ringing = false, name = "Jana", number = "", video = false, now = 0)
