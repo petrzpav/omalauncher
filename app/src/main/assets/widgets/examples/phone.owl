@@ -285,7 +285,7 @@ app "phone" {
         if actionable {
           // Green calls: on the phone, or for WhatsApp in WhatsApp. A call in another app it can't start just opens
           // that app, in accent.
-          CallKey { target: e; id: e.id; src: e.callable ? (e.video ? icVideo : icCall) : icOpen; tint: e.callable ? green : accent }
+          CallKey { target: e; id: e.id; src: e.callable ? (e.voip && e.video ? icVideo : icCall) : icOpen; tint: e.callable ? green : accent }
         }
       }
       if unfolded && foldable {

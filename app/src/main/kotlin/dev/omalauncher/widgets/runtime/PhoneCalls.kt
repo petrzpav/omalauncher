@@ -107,7 +107,7 @@ class PhoneCalls(
     fun call(target: Value?) {
         val entry = target as? Obj
         if (entry != null && entry.fields["voip"] == bool(true)) {
-            if (entry.fields["package"].textOrNull() == WHATSAPP && whatsappCall(entry)) return
+            if (entry.fields["package"].textOrNull() == WHATSAPP && entry.fields["callable"] == bool(true) && whatsappCall(entry)) return
             return open(entry)
         }
         val number = numberOf(target) ?: return
@@ -133,7 +133,7 @@ class PhoneCalls(
     }
 
     /** People saved with WhatsApp, from WhatsApp's own rows in the contacts: who, the contact, and their WhatsApp number. */
-    private class WaPerson(
+    internal class WaPerson(
         val contact: Long,
         val name: String,
         val digits: String,
@@ -252,12 +252,7 @@ class PhoneCalls(
             val waByDigits = wa.associateBy { numberKey(it.digits) }
             val waByName = wa.groupBy { it.name.lowercase() }
             for (c in VoipCalls.all(context)) {
-                val onWa =
-                    if (c.pkg != WHATSAPP) {
-                        null
-                    } else {
-                        c.number.takeIf { it.isNotBlank() }?.let { waByDigits[numberKey(it)] } ?: waByName[c.name.lowercase()]?.singleOrNull()
-                    }
+                val onWa = if (c.pkg != WHATSAPP) null else whatsappMatch(c.number, c.name, waByDigits, waByName)
                 val known = onWa?.let { w -> people.firstOrNull { it.id == w.contact } } ?: c.number.takeIf { it.isNotBlank() }?.let { byNumber[numberKey(it)] }
                     ?: if (c.pkg == WHATSAPP) null else byName[c.name.lowercase()]
                 val number = onWa?.let { "+${it.digits}" } ?: c.number.ifBlank { known?.numbers?.singleOrNull().orEmpty() }
@@ -393,6 +388,18 @@ class PhoneCalls(
          * digits, which is a whole national number in much of Europe and tells numbers apart well enough elsewhere.
          */
         fun numberKey(number: String): String = number.filter(Char::isDigit).takeLast(9)
+
+        /**
+         * Who a WhatsApp call was with: by the number its notification gave, which is never overridden; without one, the
+         * one person saved with WhatsApp under that name, and nobody when two share it or one has two numbers there.
+         */
+        internal fun <T> whatsappMatch(
+            number: String,
+            name: String,
+            byDigits: Map<String, T>,
+            byName: Map<String, List<T>>,
+        ): T? =
+            if (number.isNotBlank()) byDigits[numberKey(number)] else name.takeIf { it.isNotBlank() }?.let { byName[it.lowercase()]?.singleOrNull() }
 
         /**
          * A number as it's dialled and searched: its digits, with the + of an international one and 00 read as one,

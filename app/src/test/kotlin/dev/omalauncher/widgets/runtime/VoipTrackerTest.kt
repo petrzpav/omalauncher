@@ -119,6 +119,17 @@ class VoipTrackerTest {
         assertEquals(setOf("777123456"), keys)
     }
 
+    @Test fun aWhatsAppCallIsMatchedByItsNumberElseByAUniqueName() {
+        val byDigits = mapOf(PhoneCalls.numberKey("420777123456") to "jana", PhoneCalls.numberKey("420605111222") to "petr")
+        val byName = mapOf("jana" to listOf("jana"), "petr" to listOf("petr", "petr 2"))
+        assertEquals("jana", PhoneCalls.whatsappMatch("", "Jana", byDigits, byName))
+        // A number the app stated is never swapped for a same-named person's.
+        assertEquals(null, PhoneCalls.whatsappMatch("+420 999 888 777", "Jana", byDigits, byName))
+        assertEquals("petr", PhoneCalls.whatsappMatch("+420605111222", "", byDigits, byName))
+        // Two people under one name: nobody, so the key just opens WhatsApp.
+        assertEquals(null, PhoneCalls.whatsappMatch("", "Petr", byDigits, byName))
+    }
+
     @Test fun numbersAreDialledAsDigits() {
         assertEquals("+420777123456", PhoneCalls.dialable("+420 777-123 456"))
         assertEquals("+420777123456", PhoneCalls.dialable("00420 777 123 456"))
