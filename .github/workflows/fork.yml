@@ -2,7 +2,7 @@ name: fork
 
 # petrzpav's fork: every push to main builds dev.omalauncher.pavel, signed with the fork's own key, and puts the APK
 # on a GitHub release (v1.10.0-pavel.<run>), where Obtainium on the phone picks it up. Upstream's release.yml
-# (Simon's Play key) is disabled in the fork. Merge upstream with: git fetch upstream && git merge upstream/main
+# (Simon's Play key) is disabled in the fork (gh workflow disable release). Merge upstream with: git fetch upstream && git merge upstream/main
 on:
   push:
     branches: [main]
@@ -64,5 +64,10 @@ jobs:
           cp app/build/outputs/apk/foss/release/app-foss-release.apk "$apk"
           sha256sum "$apk" > SHA256SUMS
           upstream=$(git log -1 --format='%h %s' --first-parent HEAD | cut -c1-200)
-          gh release create "v$name" "$apk" SHA256SUMS --target "$GITHUB_SHA" --title "v$name" \
-            --notes "dev.omalauncher.pavel, built from $GITHUB_SHA ($upstream)."
+          # A re-run has the same run number: its release is there already, so the files are replaced.
+          if gh release view "v$name" >/dev/null 2>&1; then
+            gh release upload "v$name" "$apk" SHA256SUMS --clobber
+          else
+            gh release create "v$name" "$apk" SHA256SUMS --target "$GITHUB_SHA" --title "v$name" \
+              --notes "dev.omalauncher.pavel, built from $GITHUB_SHA ($upstream)."
+          fi
