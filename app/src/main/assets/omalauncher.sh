@@ -67,14 +67,16 @@ usage: omalauncher location       {lat, lon, accuracy (metres), time}, approxima
        omalauncher media set '<json>'
                                   show what a Linux player plays in Android's
                                   media controls (lock screen, notification,
-                                  car over Bluetooth, headset buttons):
-                                  {title, artist, album, art (https URL or file),
-                                  duration, position (seconds), playing, speed,
-                                  command, actions}; without a title it changes
-                                  only the fields given. A press runs
-                                  "<command> play|pause|next|previous|stop" or
-                                  "<command> seek <seconds>" in Linux; actions
-                                  limits them (default all but stop)
+                                  car over Bluetooth, Android Auto, headset
+                                  buttons): {title, artist, album, art (https URL
+                                  or file), duration, position (seconds), playing,
+                                  speed, command, actions, skip}; without a title
+                                  it changes only the fields given. A press runs
+                                  "<command> play|pause|next|previous|stop",
+                                  "<command> seek <seconds>" or "<command>
+                                  rewind|forward <skip>" in Linux; actions limits
+                                  them (default all but stop, rewind and forward;
+                                  skip 30 s)
        omalauncher media clear    take it away again
        omalauncher media          what's set: the JSON, the position as of now
        omalauncher version        {version, versionCode, commands}

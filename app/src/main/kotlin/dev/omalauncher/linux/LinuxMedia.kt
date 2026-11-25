@@ -239,6 +239,14 @@ class LinuxMedia(
 
                     override fun onSeekTo(pos: Long) = press("seek", pos / 1000)
 
+                    // −30 s / +30 s (petrzpav's fork): the player's own buttons, the step its `skip`.
+                    override fun onCustomAction(
+                        action: String,
+                        extras: android.os.Bundle?,
+                    ) {
+                        if (action in SKIPS) press(action, skip(now ?: return))
+                    }
+
                     // The car's list has the one track: picking it plays it.
                     override fun onPlayFromMediaId(
                         mediaId: String?,
@@ -320,8 +328,14 @@ class LinuxMedia(
         if ("previous" in acts) mask = mask or PlaybackState.ACTION_SKIP_TO_PREVIOUS
         if ("seek" in acts && (v.num("duration") ?: 0.0) > 0) mask = mask or PlaybackState.ACTION_SEEK_TO
         if ("stop" in acts) mask = mask or PlaybackState.ACTION_STOP
+        val step = skip(v)
         return PlaybackState
             .Builder()
+            .apply {
+                // Android Auto, the lock screen and the shade's player (Android 13+) show these beside the others.
+                if ("rewind" in acts) addCustomAction(PlaybackState.CustomAction.Builder("rewind", "−$step s", android.R.drawable.ic_media_rew).build())
+                if ("forward" in acts) addCustomAction(PlaybackState.CustomAction.Builder("forward", "+$step s", android.R.drawable.ic_media_ff).build())
+            }
             .setState(
                 if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
                 ((v.num("position") ?: 0.0) * 1000).toLong(),
@@ -340,9 +354,14 @@ class LinuxMedia(
         val buttons =
             listOfNotNull(
                 "previous".takeIf { it in acts }?.let { button(it, android.R.drawable.ic_media_previous) },
+                "rewind".takeIf { it in acts }?.let { button(it, android.R.drawable.ic_media_rew) },
                 (if (playing) "pause" else "play").takeIf { it in acts }?.let { button(it, if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play) },
+                "forward".takeIf { it in acts }?.let { button(it, android.R.drawable.ic_media_ff) },
                 "next".takeIf { it in acts }?.let { button(it, android.R.drawable.ic_media_next) },
             )
+        // The small player before Android 13 has room for three: play or pause with what's either side of it.
+        val middle = buttons.indexOfFirst { it.title == "play" || it.title == "pause" }
+        val compact = listOf(middle - 1, middle, middle + 1).filter { it in buttons.indices }
         val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         return Notification
             .Builder(context, CHANNEL)
@@ -360,7 +379,7 @@ class LinuxMedia(
                 Notification
                     .MediaStyle()
                     .setMediaSession(s.sessionToken)
-                    .setShowActionsInCompactView(*buttons.indices.toList().toIntArray()),
+                    .setShowActionsInCompactView(*(if (middle >= 0) compact else buttons.indices.take(3)).toIntArray()),
             ).build()
     }
 
@@ -428,9 +447,15 @@ class LinuxMedia(
         val LISTED = setOf("title", "artist", "album", "art", "command", "actions")
         const val ART_PX = 512
         const val MAX_ART_BYTES = 8 shl 20
-        val ACTIONS = listOf("play", "pause", "next", "previous", "seek", "stop")
+        val ACTIONS = listOf("play", "pause", "next", "previous", "seek", "stop", "rewind", "forward")
+
+        /** The step buttons (petrzpav's fork): a press runs `<command> rewind|forward <skip>`. */
+        val SKIPS = setOf("rewind", "forward")
+
+        /** The step of rewind and forward, in whole seconds: the set's `skip`, else 30. */
+        fun skip(v: Obj): Long = (v.num("skip") ?: 30.0).toLong().coerceIn(1, 3600)
         val DEFAULT_ACTIONS = listOf("play", "pause", "next", "previous", "seek")
-        val FIELDS = setOf("title", "artist", "album", "art", "duration", "position", "playing", "speed", "command", "actions")
+        val FIELDS = setOf("title", "artist", "album", "art", "duration", "position", "playing", "speed", "command", "actions", "skip")
 
         /** What the player can do: `actions` as set, the usual ones otherwise; none without a command. */
         fun actions(v: Obj): List<String> {
