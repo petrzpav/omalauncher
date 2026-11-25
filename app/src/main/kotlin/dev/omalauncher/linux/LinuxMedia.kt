@@ -11,11 +11,16 @@ import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.Icon
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.media.MediaDescription
 import android.media.MediaMetadata
 import android.media.browse.MediaBrowser
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import dev.omalauncher.MainActivity
@@ -55,6 +60,22 @@ class LinuxMedia(
     private val scope: CoroutineScope,
 ) {
     private val nm = context.getSystemService(NotificationManager::class.java)
+    private val audio = context.getSystemService(AudioManager::class.java)
+
+    /**
+     * Audio focus while the Linux player plays (petrzpav's fork): it's what tells Android Auto, and a car's head unit,
+     * to switch from the radio to the phone, and it lets a call or another player pause this one.
+     */
+    private val focusRequest =
+        AudioFocusRequest
+            .Builder(AudioManager.AUDIOFOCUS_GAIN)
+            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+            .setOnAudioFocusChangeListener(::onFocus, Handler(Looper.getMainLooper()))
+            .build()
+    private var focused = false
+
+    /** Paused for a moment's loss (a call, a navigation prompt): the focus is kept, and it plays again when it's back. */
+    private var pausedForFocus = false
     private var session: MediaSession? = null
     private var receiver: BroadcastReceiver? = null
 
@@ -116,6 +137,8 @@ class LinuxMedia(
         art = null
         artSrc = null
         nm.cancel(NOTIFICATION)
+        pausedForFocus = false
+        syncFocus(false)
         // Kept, inactive and empty: a car's browser service holds its token (see [token]).
         session?.run {
             setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_NONE, 0, 0f).build())
@@ -131,9 +154,43 @@ class LinuxMedia(
         s.setMetadata(metadata(v))
         s.setPlaybackState(playback(v))
         s.isActive = true
+        syncFocus(v.bool("playing") == true)
         if (nm.areNotificationsEnabled()) {
             nm.createNotificationChannel(NotificationChannel(CHANNEL, context.getString(R.string.linux_media_channel), NotificationManager.IMPORTANCE_LOW))
             nm.notify(NOTIFICATION, notification(v, s))
+        }
+    }
+
+    /** Holds the focus while it plays, and while it's paused for a moment's loss; gives it back otherwise. */
+    private fun syncFocus(playing: Boolean) {
+        if (playing) {
+            pausedForFocus = false
+            if (!focused) focused = audio.requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        } else if (focused && !pausedForFocus) {
+            audio.abandonAudioFocusRequest(focusRequest)
+            focused = false
+        }
+    }
+
+    /** Another app took the focus or gave it back; ducking is Android's own. Main. */
+    private fun onFocus(change: Int) {
+        val playing = now?.bool("playing") == true
+        when (change) {
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                focused = false
+                pausedForFocus = false
+                if (playing) press("pause")
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT ->
+                if (playing) {
+                    pausedForFocus = true
+                    press("pause")
+                }
+            AudioManager.AUDIOFOCUS_GAIN ->
+                if (pausedForFocus) {
+                    pausedForFocus = false
+                    press("play")
+                }
         }
     }
 
