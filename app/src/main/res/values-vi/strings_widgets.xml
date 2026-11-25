@@ -5,4 +5,5 @@
     <!-- Toast after a widget copies text, before Android 13. -->
     <string name="widgets_copied">đã sao chép</string>
     <string name="widgets_notify_channel">Tiện ích</string>
+    <string name="widgets_status_channel">Hẹn giờ và trạng thái tiện ích</string>
 </resources>

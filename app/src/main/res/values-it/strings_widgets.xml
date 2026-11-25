@@ -3,4 +3,5 @@
     <string name="widgets_no_app_opens">nessuna app apre %1$s</string>
     <string name="widgets_copied">copiato</string>
     <string name="widgets_notify_channel">Widget</string>
+    <string name="widgets_status_channel">Timer e stato dei widget</string>
 </resources>

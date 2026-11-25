@@ -141,6 +141,7 @@
 
     <string name="linux_notification_channel">Linux oturumu</string>
     <string name="linux_notify_channel">Ajanlar ve betikler</string>
+    <string name="linux_media_channel">Linux\'tan çalınan</string>
     <string name="linux_notification_installing">Linux yükleniyor · %1$s</string>
     <string name="linux_notification_installing_percent">Linux yükleniyor · %%%1$d · %2$s</string>
     <string name="linux_notification_failed">Linux kurulumu durdu · tekrar denemek için ayarlar › linux’u aç</string>
