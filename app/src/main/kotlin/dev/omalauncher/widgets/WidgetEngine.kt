@@ -1284,7 +1284,8 @@ class WidgetEngine(
                 "`omalauncher calendar [days]`, `omalauncher airpods` and `omalauncher battery` (JSON; `omalauncher --help` says more), where the " +
                 "launcher was allowed them. `omalauncher notify <title> [text]` puts a notification on the phone, to tell the user something " +
                 "they should know while away, such as a long task being done; `omalauncher share <file>...` opens Android's share sheet for " +
-                "files, to send them on with an app the user picks.\n\n" +
+                "files, to send them on with an app the user picks. A Linux player shows what it plays in Android's media controls (lock screen, " +
+                "car, headset buttons) with `omalauncher media set` (`omalauncher --help` says how).\n\n" +
                 "Connected devices (the user's other phones and Omarchy computers with the Omalauncher plugin) keep widgets, their " +
                 "`persist` values, the theme and the background the same as this phone, over SSH on the local network. " +
                 "`omalauncher devices` lists them both ways, with what syncs with each; `omalauncher devices sync <device> theme|background " +

@@ -2,7 +2,8 @@
 # omalauncher: the phone's location, calendar, AirPods and battery as JSON,
 # notifications and Android's share sheet, and the phone folders the user let
 # Linux reach, for agents and scripts (see PhoneBridge.kt). Only what the launcher was already allowed; nothing here
-# asks. Drops a request into the launcher's inbox and waits.
+# asks. `omalauncher media` puts what a Linux player plays in Android's media
+# controls (LinuxMedia.kt). Drops a request into the launcher's inbox and waits.
 # /usr/local/bin/phone, its name until 0.20, runs this too.
 set -u
 # Elsewhere only for OmalauncherScriptTest.
@@ -63,6 +64,19 @@ usage: omalauncher location       {lat, lon, accuracy (metres), time}, approxima
        omalauncher-sync call <request>...
                                   a request to a device this phone follows, as
                                   JSON (omalauncher-sync --help lists them)
+       omalauncher media set '<json>'
+                                  show what a Linux player plays in Android's
+                                  media controls (lock screen, notification,
+                                  car over Bluetooth, headset buttons):
+                                  {title, artist, album, art (https URL or file),
+                                  duration, position (seconds), playing, speed,
+                                  command, actions}; without a title it changes
+                                  only the fields given. A press runs
+                                  "<command> play|pause|next|previous|stop" or
+                                  "<command> seek <seconds>" in Linux; actions
+                                  limits them (default all but stop)
+       omalauncher media clear    take it away again
+       omalauncher media          what's set: the JSON, the position as of now
        omalauncher version        {version, versionCode, commands}
 
 Words that start with - are kept for options; put -- before one meant as
@@ -155,6 +169,7 @@ case $1 in
   devices) [ $# -le 5 ] || usage ;;
   # A linked computer's request, from omalauncher-link (ComputerLink.kt); not for agents, so not in the usage.
   link) [ $# -ge 3 ] || usage ;;
+  media) [ $# -le 3 ] || usage ;;
   *) usage ;;
 esac
 if [ ! -d "$inbox" ]; then

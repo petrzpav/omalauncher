@@ -27,6 +27,7 @@ import dev.omalauncher.linux.VOICE_COMMAND
 import dev.omalauncher.linux.Gpu
 import dev.omalauncher.linux.LinuxApp
 import dev.omalauncher.linux.LinuxDns
+import dev.omalauncher.linux.LinuxMedia
 import dev.omalauncher.linux.LinuxState
 import dev.omalauncher.linux.OpenBridge
 import dev.omalauncher.linux.PhoneBridge
@@ -131,8 +132,11 @@ class Runtime(
     /** The phone's folders the user let Linux reach: in Files, and through `omalauncher`. */
     val phoneFolders = PhoneFolders(context)
 
+    /** Linux players in Android's media controls, through `omalauncher media`. */
+    private val linuxMedia by lazy { LinuxMedia(context, proot, scope) }
+
     /** `omalauncher` in the guest (and `phone`, its old name): location, calendar and AirPods for agents, as far as widgets were allowed them; the phone folders. */
-    private val phoneBridge by lazy { PhoneBridge(context, proot, location, calendar, { widgets.airpods }, phoneFolders, { computerLink }, { deviceSync }, scope) }
+    private val phoneBridge by lazy { PhoneBridge(context, proot, location, calendar, { widgets.airpods }, phoneFolders, { computerLink }, { deviceSync }, linuxMedia, scope) }
 
     /** Computers linked to the phone (the Omarchy plugin): they change its widgets and theme over SSH to the guest. */
     val computerLink: ComputerLink by lazy { ComputerLink(context, proot, widgets, themes, scope, { deviceSync.devices.isNotEmpty() }).also { it.onPauseChanged = { deviceSync.pauseChanged() } } }
@@ -419,6 +423,7 @@ class Runtime(
                 audio.stop()
                 computerLink.linuxChanged(false)
                 deviceSync.linuxChanged(false)
+                linuxMedia.clear()
                 withContext(Dispatchers.IO) { proot.killAll() }
                 bootstrap.remove()
                 withContext(Dispatchers.IO) {
