@@ -144,6 +144,11 @@ class LinuxMedia(
         if (next.str("title").isNullOrEmpty()) return "media set: a track needs a title"
         now = next
         setAt = SystemClock.elapsedRealtime()
+        // A new track: the one from before the last stop isn't needed for the car's list any more.
+        if (v.fields.containsKey("title")) {
+            last = null
+            lastArt = null
+        }
         val listed = LISTED.any { it in v.fields }
         loadArt(next.str("art"))
         publish()
@@ -152,10 +157,15 @@ class LinuxMedia(
     }
 
     /** Takes the player away from Android's media controls. */
-    fun clear() {
+    /** [forget]: Linux stopped or removed, so nothing could play it again: the car's list doesn't offer it. */
+    fun clear(forget: Boolean = false) {
         now?.let {
             last = it
             lastArt = art
+        }
+        if (forget) {
+            last = null
+            lastArt = null
         }
         now = null
         artJob?.cancel()
@@ -167,7 +177,15 @@ class LinuxMedia(
         syncFocus(false, pressed = false)
         // Kept, inactive and empty: a car's browser service holds its token (see [token]).
         session?.run {
-            setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_NONE, 0, 0f).build())
+            // With a track to play again ([item]), a car may ask for it: what it would press says it can.
+            val again = last?.takeIf { it.str("command") != null && "play" in actions(it) } != null
+            setPlaybackState(
+                PlaybackState
+                    .Builder()
+                    .setState(PlaybackState.STATE_NONE, 0, 0f)
+                    .setActions(if (again) PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PLAY_FROM_MEDIA_ID or PlaybackState.ACTION_PLAY_FROM_SEARCH else 0)
+                    .build(),
+            )
             setMetadata(null)
             isActive = false
         }
@@ -246,7 +264,7 @@ class LinuxMedia(
         session ?: MediaSession(context, TAG).also { s ->
             s.setCallback(
                 object : MediaSession.Callback() {
-                    override fun onPlay() = press("play")
+                    override fun onPlay() = if (now == null) playLast() else press("play")
 
                     override fun onPause() = press("pause")
 
@@ -276,7 +294,7 @@ class LinuxMedia(
                     override fun onPlayFromSearch(
                         query: String?,
                         extras: android.os.Bundle?,
-                    ) = press("play")
+                    ) = if (now == null) playLast() else press("play")
                 },
             )
             // Nothing until the first set, for the car's browser that has the session before anything plays.
