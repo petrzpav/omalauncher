@@ -48,7 +48,8 @@ class LauncherUpdates(
 
     /** Asks GitHub unless it was asked within the hour; [force] asks anyway. */
     fun check(force: Boolean = false) {
-        if (fromFdroid || checking) return
+        // petrzpav's fork: Obtainium updates it from the fork's releases; upstream's APK is another app.
+        if (fromFdroid || checking || BuildConfig.APPLICATION_ID.endsWith(".pavel")) return
         if (!force && System.currentTimeMillis() - checkedAt < CHECK_EVERY) return
         checking = true
         scope.launch {

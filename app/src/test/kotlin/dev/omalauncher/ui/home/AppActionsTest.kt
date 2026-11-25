@@ -17,6 +17,7 @@ class AppActionsTest {
         voiced: MutableList<String>,
     ) = AppHandlers(
         launch = {},
+        leave = {},
         pin = {},
         info = {},
         uninstall = {},
