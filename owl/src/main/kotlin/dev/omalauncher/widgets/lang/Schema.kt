@@ -208,7 +208,9 @@ internal val SINCE =
         // owl 25: the battery of the Bluetooth device media plays on, once a tap has allowed Bluetooth.
         mapOf("volume(\"request\")" to 25) +
         // owl 26: talking to the agent in Voice about an owl app, to change it.
-        mapOf("appAction(\"voice\")" to 26)
+        mapOf("appAction(\"voice\")" to 26) +
+        // owl 26 in this fork: the Linux windows open, to bring one back to the front.
+        mapOf("android.windows" to 26)
 
 /** A Shader's `uniform shader name;`, an image it samples, named like this in [SINCE]. */
 internal const val SHADER_IMAGE = "uniform shader"
@@ -363,7 +365,7 @@ val SPEECH_ANYWHERE = setOf("stop", "cancel")
 val ASKS = setOf("location", "calendar", "airpods", "volume")
 
 /** Data from the phone and the launcher; device is fixed, system, network and power are polled, the rest update as they change. */
-internal val ANDROID = setOf("battery", "device", "media", "notifications", "volume", "system", "network", "power", "sim", "alarm", "modes", "apps", "agents", "recent", "drawer", "modifiers", "speech", "location", "airpods", "calendar", "motion", "strip")
+internal val ANDROID = setOf("battery", "device", "media", "notifications", "volume", "system", "network", "power", "sim", "alarm", "modes", "apps", "agents", "recent", "drawer", "modifiers", "speech", "location", "airpods", "calendar", "motion", "strip", "windows")
 
 /**
  * The words an action's first value may be, when it's written out; [numbers] also allows a number. [forms] are the
