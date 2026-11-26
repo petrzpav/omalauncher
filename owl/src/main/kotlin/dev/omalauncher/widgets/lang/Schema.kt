@@ -214,7 +214,9 @@ internal val SINCE =
         // owl 26 in this fork: a notification of the widget's own, which Android counts down on the lock screen, and its buttons.
         listOf(WIDGET_NOTIFICATION, "onNotification").associateWith { 26 } +
         // owl 26 in this fork: the phone's calls (its call log and other apps' calls) and contacts, for a phone app.
-        listOf("android.calls", "calls").associateWith { 26 }
+        listOf("android.calls", "calls").associateWith { 26 } +
+        // owl 26 in this fork: the clipboard's text, read when a touch asks for it, like a number pasted into a keypad.
+        mapOf("paste" to 26)
 
 /** A Shader's `uniform shader name;`, an image it samples, named like this in [SINCE]. */
 internal const val SHADER_IMAGE = "uniform shader"
@@ -391,6 +393,9 @@ internal class Words(
 )
 
 /** What the store's review lists for a widget that reads or changes AirPods, from the source or airpods(...). */
+/** The handlers paste() works in (owl 26 in this fork): a touch that asks for it, never a page's or a source's event. */
+internal val PASTE_HANDLERS = setOf("onTap", "onLongPress")
+
 /** What the store's review lists for a widget that reads android.calls. */
 internal const val CALLS_COMMAND = "read the phone's calls and contacts, once you allow it"
 
