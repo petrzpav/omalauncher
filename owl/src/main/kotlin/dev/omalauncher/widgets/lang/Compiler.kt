@@ -1576,7 +1576,7 @@ class Compiler private constructor(
                     if (TriggerKind.entries.any { it.word == handlerName }) fail("calls(\"call\", …) places a phone call, so it works in onTap, not in a trigger", call.pos)
                     commands += "place phone calls when you tap"
                 }
-                val callsWord = (args[0].const as? Str)?.v
+                val callsWord = if (call.name == "calls") (args.getOrNull(0)?.const as? Str)?.v else null
                 if (call.name == "calls" && (callsWord == "delete" || callsWord == "undo")) {
                     // Gone from the call log for good a moment later: only for a touch, never on a timer or a fetched value.
                     if (TriggerKind.entries.any { it.word == handlerName }) fail("calls(\"$callsWord\", …) deletes calls, so it works in a handler of a touch like onTap or onDragEnd, not in a trigger", call.pos)

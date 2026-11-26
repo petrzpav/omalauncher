@@ -1418,7 +1418,7 @@ class LangTest {
             Review.risks(p.commands).map { it.removePrefix("command ").substringBefore(": ") },
         )
         // A swipe deletes one, and a tap brings it back; never a timer, and the review says it deletes.
-        val swipe = src.replace("onTap: calls(\"call\", e)", "drag: horizontal; onDragEnd: calls(\"delete\", e); onTap: calls(\"undo\")")
+        val swipe = src.replace("onTap: calls(\"call\", e)", "drag: horizontal; onDrag: haptic(); onDragEnd: calls(\"delete\", e); onTap: calls(\"undo\")")
         val deletes = Compiler.compile(swipe)
         assertEquals(listOf("read the phone's calls and contacts, once you allow it", "delete calls from the call log when you swipe or tap"), deletes.commands)
         assertTrue(Review.risks(deletes.commands).any { it.contains("deletes calls from the phone's call log") })
