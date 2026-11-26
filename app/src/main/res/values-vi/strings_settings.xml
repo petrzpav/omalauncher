@@ -60,7 +60,7 @@
     <string name="permissions_calendar">lịch</string>
     <string name="permissions_calendar_uses">sự kiện của bạn, chỉ đọc · tiện ích lịch · tác nhân qua omalauncher calendar</string>
     <string name="permissions_call_log">nhật ký cuộc gọi</string>
-    <string name="permissions_call_log_uses">cuộc gọi của bạn, chỉ đọc · ứng dụng điện thoại</string>
+    <string name="permissions_call_log_uses">cuộc gọi của bạn, và xóa cuộc gọi bạn vuốt đi · ứng dụng điện thoại</string>
     <string name="permissions_contacts">danh bạ</string>
     <string name="permissions_contacts_uses">tên và số, chỉ đọc · ứng dụng điện thoại</string>
     <string name="permissions_phone">gọi điện</string>

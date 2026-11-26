@@ -54,7 +54,7 @@
     <string name="permissions_calendar">календар</string>
     <string name="permissions_calendar_uses">ваші події, лише читання · віджети календаря · агенти через omalauncher calendar</string>
     <string name="permissions_call_log">журнал дзвінків</string>
-    <string name="permissions_call_log_uses">ваші дзвінки, лише читання · застосунки-телефони</string>
+    <string name="permissions_call_log_uses">ваші дзвінки та видалення змахнутих · застосунки-телефони</string>
     <string name="permissions_contacts">контакти</string>
     <string name="permissions_contacts_uses">імена й номери, лише читання · застосунки-телефони</string>
     <string name="permissions_phone">дзвінки</string>

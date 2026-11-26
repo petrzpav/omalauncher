@@ -1,5 +1,5 @@
 app "phone" {
-  meta { owl: 26; description: "Your calls in one list, the phone's and WhatsApp's or Messenger's alike, grouped by day; your contacts, searched by name or number; and a keypad. A tap on the handset calls back. Nothing is read until you tap allow"; version: "1.0"; license: "MIT"; category: "productivity" }
+  meta { owl: 26; description: "Your calls in one list, the phone's and WhatsApp's or Messenger's alike, grouped by day; your contacts, searched by name or number; and a keypad. A tap on the handset calls back, and a call swiped away is deleted. Nothing is read until you tap allow"; version: "1.0"; license: "MIT"; category: "productivity" }
   title: "phone"
   // The tab bar runs along the bottom, above the navigation bar.
   edge: true
@@ -15,7 +15,7 @@ app "phone" {
     <path d="M150 92a18 18 0 0 1 14 14" stroke="#7AA2F7" stroke-width="10" fill="none" stroke-linecap="round"/>
   </svg>"""
 
-  // Material Icons' handset, call arrows, backspace, message, person, video, history, dialpad and people (Apache 2.0).
+  // Material Icons' handset, call arrows, backspace, message, person, video, history, dialpad, people and bin (Apache 2.0).
   // currentColor takes the Image's tint.
   asset icCall = base64"PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iY3VycmVudENvbG9yIiBkPSJNNi42MiAxMC43OWMxLjQ0IDIuODMgMy43NiA1LjE0IDYuNTkgNi41OWwyLjItMi4yYy4yNy0uMjcuNjctLjM2IDEuMDItLjI0IDEuMTIuMzcgMi4zMy41NyAzLjU3LjU3LjU1IDAgMSAuNDUgMSAxVjIwYzAgLjU1LS40NSAxLTEgMS05LjM5IDAtMTctNy42MS0xNy0xNyAwLS41NS40NS0xIDEtMWgzLjVjLjU1IDAgMSAuNDUgMSAxIDAgMS4yNS4yIDIuNDUuNTcgMy41Ny4xMS4zNS4wMy43NC0uMjUgMS4wMmwtMi4yIDIuMnoiLz48L3N2Zz4="
   asset icOut = base64"PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iY3VycmVudENvbG9yIiBkPSJNOSA1djJoNi41OUw0IDE4LjU5IDUuNDEgMjAgMTcgOC40MVYxNWgyVjV6Ii8+PC9zdmc+"
@@ -29,6 +29,7 @@ app "phone" {
   asset icRecents = base64"PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iY3VycmVudENvbG9yIiBkPSJNMTMgM2MtNC45NyAwLTkgNC4wMy05IDlIMWwzLjg5IDMuODkuMDcuMTRMOSAxMkg2YzAtMy44NyAzLjEzLTcgNy03czcgMy4xMyA3IDctMy4xMyA3LTcgN2MtMS45MyAwLTMuNjgtLjc5LTQuOTQtMi4wNmwtMS40MiAxLjQyQzguMjcgMTkuOTkgMTAuNTEgMjEgMTMgMjFjNC45NyAwIDktNC4wMyA5LTlzLTQuMDMtOS05LTl6bS0xIDV2NWw0LjI4IDIuNTQuNzItMS4yMS0zLjUtMi4wOFY4SDEyeiIvPjwvc3ZnPg=="
   asset icPad = base64"PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iY3VycmVudENvbG9yIiBkPSJNMTIgMTljLTEuMSAwLTIgLjktMiAycy45IDIgMiAyIDItLjkgMi0yLS45LTItMi0yek02IDFjLTEuMSAwLTIgLjktMiAycy45IDIgMiAyIDItLjkgMi0yLS45LTItMi0yem0wIDZjLTEuMSAwLTIgLjktMiAycy45IDIgMiAyIDItLjkgMi0yLS45LTItMi0yem0wIDZjLTEuMSAwLTIgLjktMiAycy45IDIgMiAyIDItLjkgMi0yLS45LTItMi0yem0xMi04YzEuMSAwIDItLjkgMi0ycy0uOS0yLTItMi0yIC45LTIgMiAuOSAyIDIgMnptLTYgOGMtMS4xIDAtMiAuOS0yIDJzLjkgMiAyIDIgMi0uOSAyLTItLjktMi0yLTJ6bTYgMGMtMS4xIDAtMiAuOS0yIDJzLjkgMiAyIDIgMi0uOSAyLTItLjktMi0yLTJ6bTAtNmMtMS4xIDAtMiAuOS0yIDJzLjkgMiAyIDIgMi0uOSAyLTItLjktMi0yLTJ6bS02IDBjLTEuMSAwLTIgLjktMiAycy45IDIgMiAyIDItLjkgMi0yLS45LTItMi0yem0wLTZjLTEuMSAwLTIgLjktMiAycy45IDIgMiAyIDItLjkgMi0yLS45LTItMi0yeiIvPjwvc3ZnPg=="
   asset icContacts = base64"PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iY3VycmVudENvbG9yIiBkPSJNMTYgMTFjMS42NiAwIDIuOTktMS4zNCAyLjk5LTNTMTcuNjYgNSAxNiA1Yy0xLjY2IDAtMyAxLjM0LTMgM3MxLjM0IDMgMyAzem0tOCAwYzEuNjYgMCAyLjk5LTEuMzQgMi45OS0zUzkuNjYgNSA4IDVDNi4zNCA1IDUgNi4zNCA1IDhzMS4zNCAzIDMgM3ptMCAyYy0yLjMzIDAtNyAxLjE3LTcgMy41VjE5aDE0di0yLjVjMC0yLjMzLTQuNjctMy41LTctMy41em04IDBjLS4yOSAwLS42Mi4wMi0uOTcuMDUgMS4xNi44NCAxLjk3IDEuOTcgMS45NyAzLjQ1VjE5aDZ2LTIuNWMwLTIuMzMtNC42Ny0zLjUtNy0zLjV6Ii8+PC9zdmc+"
+  asset icDelete = base64"PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iY3VycmVudENvbG9yIiBkPSJNNiAxOWMwIDEuMS45IDIgMiAyaDhjMS4xIDAgMi0uOSAyLTJWN0g2djEyek0xOSA0aC0zLjVsLTEtMWgtNWwtMSAxSDV2MmgxNFY0eiIvPjwvc3ZnPg=="
   asset icOpen = base64"PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iY3VycmVudENvbG9yIiBkPSJNMTkgMTlINVY1aDdWM0g1Yy0xLjExIDAtMiAuOS0yIDJ2MTRjMCAxLjEuODkgMiAyIDJoMTRjMS4xIDAgMi0uOSAyLTJ2LTdoLTJ2N3pNMTQgM3YyaDMuNTlsLTkuODMgOS44MyAxLjQxIDEuNDFMMTkgNi40MVYxMGgyVjNoLTd6Ii8+PC9zdmc+"
 
   // The call log, other apps' calls kept from their notifications, and the contacts; nothing until a tap allows it.
@@ -47,8 +48,14 @@ app "phone" {
   state callId = ""                 // which call key that was
   state filledAt = 0                // when the empty keypad brought back the last number, so a double tap doesn't call it
   state voipHint = true persist     // the notification-access banner, until it's closed
+  // The call being swiped, by id, and how far; and the one let go of to delete, hidden until the list leaves it out.
+  state dragging = ""
+  state dragX = 0
+  state swiped = ""
+  state swipedAt = 0
 
-  let calls = c.calls ?? []
+  let calls = (c.calls ?? []).filter(e => e.id != swiped || tick - swipedAt >= 2)
+  let wide = screenWidth ?? 400
   let missed = calls.filter(e => e.direction == "missed")
   let listed = only == "missed" ? missed : calls
   let today = fmtTime(now, "yyyyMMdd")
@@ -253,39 +260,79 @@ app "phone" {
     // A private caller has nothing to call, message or save; a call in another app without a number has only its app.
     let actionable = e.voip || e.number != ""
     let foldable = e.number != "" || e.contact != ""
+    let held = dragging == e.id
+    // Let go this far out, it's deleted; less, it springs back. Distance only: a flick down the list isn't a delete.
+    let past = held && abs(dragX) > wide * 0.4
       fill: width
       gap: 0
       if header != "" {
         Text { text: header; style: label; color: muted; padding: [12, 18, 12, 6] }
       }
-      Row {
+      Box {
         fill: width
         height: 64
-        gap: 14
-        align: center
-        padding: [12, 0, 6, 0]
-        background: unfolded ? alpha(muted, 0.08) : transparent
-        onTap: { if foldable { open = unfolded ? open.filter(x => x != e.id) : flatten([open, [e.id]], 1) } }
-        onLongPress: { if foldable { calls("contact", e) } }
-        // A call in another app shows that app; the phone's own show who.
-        Avatar { name: e.name; app: e.voip ? e.icon : "" }
-        Column {
-          weight: 1
-          gap: 2
-          // Red marks a missed call among the rest; with only missed ones listed it would mark nothing.
-          Text { text: who; color: isMissed && only != "missed" ? red : foreground; maxLines: 1 }
+        // Under the row as it's swiped: red, with the bin on the side it uncovers, brighter once letting go deletes.
+        if held && dragX != 0 {
           Row {
-            gap: 4
+            fill: true
+            gap: 8
             align: center
-            Icon { src: isMissed ? icMissed : (e.direction == "out" ? icOut : icIn); tint: isMissed ? red : (e.direction == "out" ? green : blue); s: 14 }
-            Text { text: join(parts.filter(p => p != null), " · "); style: small; color: muted; maxLines: 1; weight: 1 }
+            padding: [20, 0, 20, 0]
+            background: alpha(red, past ? 0.3 : 0.12)
+            if dragX < 0 { Spacer { weight: 1 } }
+            Icon { src: icDelete; tint: red; s: 20 }
+            Text { text: past ? "let go to delete" : "delete"; style: small; color: red; maxLines: 1 }
           }
         }
-        // The other side can be called back where there's a number, or its app can.
-        if actionable {
-          // Green calls: on the phone, or for WhatsApp in WhatsApp. A call in another app it can't start just opens
-          // that app, in accent.
-          CallKey { target: e; id: e.id; src: e.callable ? (e.voip && e.video ? icVideo : icCall) : icOpen; tint: e.callable ? green : accent }
+        Row {
+          fill: width
+          height: 64
+          gap: 14
+          align: center
+          padding: [12, 0, 6, 0]
+          // Solid while it's swiped, so the red shows only where it's uncovered.
+          background: held ? background : (unfolded ? alpha(muted, 0.08) : transparent)
+          offset: [held ? dragX : 0, 0]
+          animate offset: spring(0.8, 400)
+          // Sideways only, so the list still scrolls under a finger that lands on a call.
+          drag: horizontal
+          onDrag: {
+            dragging = e.id
+            dragX = dragX + dx
+          }
+          onDragEnd: {
+            if dragging == e.id && abs(dragX) > wide * 0.4 {
+              haptic()
+              swiped = e.id
+              swipedAt = tick
+              open = open.filter(x => x != e.id)
+              calls("delete", e)
+            }
+            dragging = ""
+            dragX = 0
+          }
+          onTap: { if foldable { open = unfolded ? open.filter(x => x != e.id) : flatten([open, [e.id]], 1) } }
+          onLongPress: { if foldable { calls("contact", e) } }
+          // A call in another app shows that app; the phone's own show who.
+          Avatar { name: e.name; app: e.voip ? e.icon : "" }
+          Column {
+            weight: 1
+            gap: 2
+            // Red marks a missed call among the rest; with only missed ones listed it would mark nothing.
+            Text { text: who; color: isMissed && only != "missed" ? red : foreground; maxLines: 1 }
+            Row {
+              gap: 4
+              align: center
+              Icon { src: isMissed ? icMissed : (e.direction == "out" ? icOut : icIn); tint: isMissed ? red : (e.direction == "out" ? green : blue); s: 14 }
+              Text { text: join(parts.filter(p => p != null), " · "); style: small; color: muted; maxLines: 1; weight: 1 }
+            }
+          }
+          // The other side can be called back where there's a number, or its app can.
+          if actionable {
+            // Green calls: on the phone, or for WhatsApp in WhatsApp. A call in another app it can't start just opens
+            // that app, in accent.
+            CallKey { target: e; id: e.id; src: e.callable ? (e.voip && e.video ? icVideo : icCall) : icOpen; tint: e.callable ? green : accent }
+          }
         }
       }
       if unfolded && foldable {
@@ -395,7 +442,7 @@ app "phone" {
       Spacer { weight: 1 }
     } else if tab == "recents" {
       if !c.granted && len(calls) == 0 {
-        Empty { head: "your calls in one list"; note: "the phone's call log, and from now on calls in whatsapp, messenger and other calling apps, grouped by day. read only, on the phone"; allow: true }
+        Empty { head: "your calls in one list"; note: "the phone's call log, and from now on calls in whatsapp, messenger and other calling apps, grouped by day. kept on the phone"; allow: true }
       } else {
         Row {
           fill: width
@@ -575,6 +622,26 @@ app "phone" {
       }
     }
 
+    // A call swiped away is deleted a few seconds later; until then it can come back. Under the list, so nothing in it moves.
+    if (c.deleting ?? 0) > 0 {
+      Row {
+        fill: width
+        height: 48
+        gap: 8
+        align: center
+        padding: [12, 0, 4, 0]
+        background: alpha(muted, 0.12)
+        Icon { src: icDelete; tint: muted; s: 18 }
+        Text { text: c.deleting == 1 ? "call deleted" : "${c.deleting} calls deleted"; style: small; weight: 1; maxLines: 1 }
+        Box {
+          width: 88
+          height: 44
+          align: center
+          onTap: { haptic("light"); swiped = ""; calls("undo") }
+          Text { text: "undo"; color: accent; align: center; fill: width; maxLines: 1 }
+        }
+      }
+    }
     Box { fill: width; height: 1; background: alpha(muted, 0.15) }
     Row {
       fill: width

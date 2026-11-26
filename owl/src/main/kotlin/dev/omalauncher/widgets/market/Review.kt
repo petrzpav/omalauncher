@@ -270,6 +270,7 @@ class Review(
                 Regex("""^read events in the phone's calendars""") to "sees calendar event titles, times and locations; check nothing sends them elsewhere",
                 Regex("""^read the phone's calls and contacts""") to "sees who you called and were called by, and your contacts; check nothing sends them elsewhere",
                 Regex("""^place phone calls""") to "places phone calls as you; check which numbers it calls and when",
+                Regex("""^delete calls from the call log""") to "deletes calls from the phone's call log; check it deletes only the one you swiped or tapped",
                 Regex("""^read the open Linux windows""") to "sees the titles of open Linux windows (folders, files, commands); check nothing sends them elsewhere",
                 Regex("""^read and change the AirPods""") to "reads and changes the AirPods connected to the phone; check where it sends what it reads",
                 Regex("""^read Android notifications""") to "sees every notification on the phone; check nothing sends them anywhere",

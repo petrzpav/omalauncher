@@ -25,9 +25,13 @@ import dev.omalauncher.widgets.lang.Str
 import dev.omalauncher.widgets.lang.Value
 import dev.omalauncher.widgets.lang.bool
 import dev.omalauncher.widgets.lang.textOrNull
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.catch
@@ -37,12 +41,13 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
  * The phone's calls and contacts, for widgets and owl apps: `source c = android.calls`, and `calls("request")`,
- * `calls("call", n)`, `calls("open", e)` and `calls("contact", x)`. The call log (READ_CALL_LOG) and the contacts
- * (READ_CONTACTS) are only read once a tap's calls("request") allowed them, and calls in other apps, WhatsApp and the
+ * `calls("call", n)`, `calls("open", e)`, `calls("contact", x)`, `calls("delete", e)` and `calls("undo")`. The call log
+ * (READ_CALL_LOG) and the contacts (READ_CONTACTS) are only read once a tap's calls("request") allowed them, and calls in other apps, WhatsApp and the
  * like, only kept from then on ([VoipCalls]). Read while a widget showing them is on screen, like every android source.
  */
 class PhoneCalls(
@@ -58,6 +63,11 @@ class PhoneCalls(
 
     /** Bumped as an activity resumes, since notification access is given in Android's settings, not here. */
     private var resumed by mutableIntStateOf(0)
+
+    /** Entries calls("delete") took away, by id: left out of android.calls until they're deleted or calls("undo"). */
+    private var hidden by mutableStateOf(emptySet<String>())
+    private val deleting = HashMap<String, Job>()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val labels = AppLabels(context)
 
@@ -197,17 +207,65 @@ class PhoneCalls(
         return number?.trim()?.takeIf { n -> n.any(Char::isDigit) }
     }
 
+    /**
+     * calls("delete", e): takes an entry of calls out of the list at once and deletes it [UNDO_MS] later, unless
+     * calls("undo") brings it back first: the phone's from Android's call log (where the dialer loses it too, so it needs
+     * WRITE_CALL_LOG, asked for here the first time), another app's from the calls kept here. Gone for good after that.
+     */
+    fun delete(target: Value?) {
+        val id = (target as? Obj)?.fields?.get("id").textOrNull() ?: return
+        if (id in hidden) return
+        val row = id.removePrefix("log:").takeIf { it != id }?.toLongOrNull()
+        val voip = id.removePrefix("voip:").takeIf { it != id }
+        when {
+            voip != null -> later(id) { VoipCalls.forget(context, voip).join() }
+            row != null -> {
+                val gone = suspend {
+                    withContext(Dispatchers.IO) {
+                        runCatching { context.contentResolver.delete(CallLog.Calls.CONTENT_URI, "${CallLog.Calls._ID} = ?", arrayOf(row.toString())) }
+                    }
+                    Unit
+                }
+                if (check(Manifest.permission.WRITE_CALL_LOG)) return later(id, gone)
+                // A preview has no activity to ask from; refused, the entry stays.
+                ask?.invoke(Manifest.permission.WRITE_CALL_LOG) { if (it) later(id, gone) }
+            }
+        }
+    }
+
+    private fun later(
+        id: String,
+        gone: suspend () -> Unit,
+    ) {
+        hidden = hidden + id
+        deleting[id] =
+            scope.launch {
+                delay(UNDO_MS)
+                gone()
+                // Shown again only once it's gone from what the list is read from.
+                deleting.remove(id)
+                hidden = hidden - id
+            }
+    }
+
+    /** calls("undo"): every entry calls("delete") took away and hasn't deleted yet comes back. */
+    fun undo() {
+        for (job in deleting.values) job.cancel()
+        deleting.clear()
+        hidden = emptySet()
+    }
+
     /** Started from the launcher in front; false where nothing handles it, which mustn't crash the launcher. */
     private fun start(intent: Intent): Boolean = runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
 
-    /** android.calls: {granted, contactsGranted, canCall, voip, calls, contacts}, the lists empty until each is allowed. */
+    /** android.calls: {granted, contactsGranted, canCall, voip, calls, contacts, deleting}, the lists empty until each is allowed. */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun updates(): Flow<Value> =
-        snapshotFlow { Grants(log, contacts, calling, resumed) }.flatMapLatest { g ->
+        snapshotFlow { Grants(log, contacts, calling, resumed, hidden) }.flatMapLatest { g ->
             changes(g).mapLatest {
                 // Provider queries can block; never on the UI thread. A grant can be taken back at any time.
                 withContext(Dispatchers.IO) { value(g) }
-            }.catch { if (it is SecurityException) emit(value(Grants(false, false, calling, resumed))) else throw it }
+            }.catch { if (it is SecurityException) emit(value(Grants(false, false, calling, resumed, hidden))) else throw it }
         }.distinctUntilChanged()
 
     private data class Grants(
@@ -215,6 +273,7 @@ class PhoneCalls(
         val contacts: Boolean,
         val calling: Boolean,
         val resumed: Int,
+        val hidden: Set<String>,
     )
 
     /** The call log, the contacts and the calls kept from other apps, as each changes. */
@@ -263,7 +322,7 @@ class PhoneCalls(
                 )
             }
         }
-        val calls = rows.sortedByDescending { it.first }.take(MAX_CALLS).map { it.second }
+        val calls = rows.sortedByDescending { it.first }.map { it.second }.filter { (it as Obj).fields["id"].textOrNull() !in g.hidden }.take(MAX_CALLS)
         return Obj(
             mapOf(
                 "granted" to bool(g.log),
@@ -271,6 +330,7 @@ class PhoneCalls(
                 "canCall" to bool(g.calling),
                 "voip" to bool(recording && media.granted),
                 "calls" to Lst(calls),
+                "deleting" to Num(g.hidden.size.toDouble()),
                 "contacts" to Lst(people.map { it.value }),
             ),
         )
@@ -369,6 +429,9 @@ class PhoneCalls(
         /** The newest calls listed, the phone's and other apps' together. */
         const val MAX_CALLS = 500
         const val MAX_CONTACTS = 5000
+
+        /** How long a deleted entry can be brought back with calls("undo"). */
+        const val UNDO_MS = 5_000L
         const val WHATSAPP = "com.whatsapp"
         private const val WA_VOICE = "vnd.android.cursor.item/vnd.com.whatsapp.voip.call"
         private const val WA_VIDEO = "vnd.android.cursor.item/vnd.com.whatsapp.video.call"

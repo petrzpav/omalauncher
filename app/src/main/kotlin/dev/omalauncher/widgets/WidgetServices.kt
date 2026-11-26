@@ -729,6 +729,8 @@ class WidgetServices(
                     "call" -> calls.call(args.getOrNull(1))
                     "open" -> calls.open(args.getOrNull(1))
                     "contact" -> calls.contact(args.getOrNull(1))
+                    "delete" -> calls.delete(args.getOrNull(1))
+                    "undo" -> calls.undo()
                     else -> Unit
                 }
             }

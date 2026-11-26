@@ -459,17 +459,20 @@ internal val ACTION_WORDS =
                 "calendar takes request or open; the events are in source x = android.calendar",
                 forms = mapOf("request" to (1..1 to "calendar(\"request\")"), "open" to (1..2 to "calendar(\"open\"), or calendar(\"open\", event)")),
             ),
-        // owl 26 in this fork: calls("call", n) places a call, so only from onTap; the compiler and WidgetInstance check.
+        // owl 26 in this fork: calls("call", n) places a call, so only from onTap, and calls("delete", e) deletes one, only
+        // from a touch; the compiler and WidgetInstance check.
         "calls" to
             Words(
-                setOf("request", "call", "open", "contact"),
-                "calls takes request, call, open or contact; the calls and contacts are in source x = android.calls",
+                setOf("request", "call", "open", "contact", "delete", "undo"),
+                "calls takes request, call, open, contact, delete or undo; the calls and contacts are in source x = android.calls",
                 forms =
                     mapOf(
                         "request" to (1..1 to "calls(\"request\")"),
                         "call" to (2..2 to "calls(\"call\", number), or calls(\"call\", entry)"),
                         "open" to (2..2 to "calls(\"open\", entry)"),
                         "contact" to (2..2 to "calls(\"contact\", entry), or calls(\"contact\", number)"),
+                        "delete" to (2..2 to "calls(\"delete\", entry)"),
+                        "undo" to (1..1 to "calls(\"undo\")"),
                     ),
             ),
         // owl 18: where a Browser goes, or how it loads where it is.

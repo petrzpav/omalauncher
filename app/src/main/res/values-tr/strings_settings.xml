@@ -52,7 +52,7 @@
     <string name="permissions_calendar">takvim</string>
     <string name="permissions_calendar_uses">etkinliklerin, salt okunur · takvim widget’ları · omalauncher calendar ile ajanlar</string>
     <string name="permissions_call_log">arama geçmişi</string>
-    <string name="permissions_call_log_uses">aramaların, salt okunur · telefon uygulamaları</string>
+    <string name="permissions_call_log_uses">aramaların ve kaydırıp sildiklerin · telefon uygulamaları</string>
     <string name="permissions_contacts">kişiler</string>
     <string name="permissions_contacts_uses">adlar ve numaralar, salt okunur · telefon uygulamaları</string>
     <string name="permissions_phone">telefon aramaları</string>

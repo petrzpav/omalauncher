@@ -245,7 +245,24 @@ object VoipCalls {
         ended: List<VoipCall>,
     ) {
         if (ended.isEmpty()) return
-        val next = (ended + all(context)).distinctBy { it.id }.sortedByDescending { it.start }.take(MAX)
+        save(context, (ended + all(context)).distinctBy { it.id }.sortedByDescending { it.start }.take(MAX))
+    }
+
+    /** calls("delete") on a call kept here: it's gone from the list and the file. On the worker, as calls are kept. */
+    fun forget(
+        context: Context,
+        id: String,
+    ): kotlinx.coroutines.Job =
+        worker.launch {
+            val all = all(context)
+            if (all.none { it.id == id }) return@launch
+            save(context, all.filterNot { it.id == id })
+        }
+
+    private fun save(
+        context: Context,
+        next: List<VoipCall>,
+    ) {
         calls = next
         val array = JSONArray()
         for (c in next) {

@@ -56,7 +56,7 @@
     <string name="permissions_calendar">kalender</string>
     <string name="permissions_calendar_uses">deine termine, nur lesen · kalender-widgets · agenten mit omalauncher calendar</string>
     <string name="permissions_call_log">anrufliste</string>
-    <string name="permissions_call_log_uses">deine anrufe, nur lesen · telefon-apps</string>
+    <string name="permissions_call_log_uses">deine anrufe, und löschen, was du wegwischst · telefon-apps</string>
     <string name="permissions_contacts">kontakte</string>
     <string name="permissions_contacts_uses">namen und nummern, nur lesen · telefon-apps</string>
     <string name="permissions_phone">anrufen</string>

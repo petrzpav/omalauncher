@@ -51,7 +51,7 @@
     <string name="permissions_calendar">日历</string>
     <string name="permissions_calendar_uses">你的日程，只读 · 日历小组件 · 智能体用 omalauncher calendar</string>
     <string name="permissions_call_log">通话记录</string>
-    <string name="permissions_call_log_uses">你的通话，只读 · 电话应用</string>
+    <string name="permissions_call_log_uses">你的通话，以及删除你滑走的通话 · 电话应用</string>
     <string name="permissions_contacts">联系人</string>
     <string name="permissions_contacts_uses">姓名和号码，只读 · 电话应用</string>
     <string name="permissions_phone">拨打电话</string>

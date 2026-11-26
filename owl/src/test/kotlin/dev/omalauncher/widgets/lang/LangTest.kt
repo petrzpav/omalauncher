@@ -1403,7 +1403,7 @@ class LangTest {
         assertEquals("android.calls", (p.globals.single() as Global.Source).kind)
         assertEquals(listOf("read the phone's calls and contacts, once you allow it", "place phone calls when you tap"), p.commands)
         assertTrue(compileError(src.replace("owl: 26", "owl: 25")).contains("needs owl 26"))
-        assertTrue(compileError(src.replace("\"request\"", "\"dial\"")).contains("calls takes request, call, open or contact"))
+        assertTrue(compileError(src.replace("\"request\"", "\"dial\"")).contains("calls takes request, call, open, contact, delete or undo"))
         assertTrue(compileError(src.replace("calls(\"call\", e)", "calls(\"call\")")).contains("calls(\"call\", number)"))
         // Asking and calling come only from a touch that has lifted, never a press or a trigger.
         assertTrue(compileError(src.replace("onTap: calls(\"call\"", "onPress: calls(\"call\"")).contains("put it in onTap"))
@@ -1417,6 +1417,14 @@ class LangTest {
             listOf("sees who you called and were called by, and your contacts; check nothing sends them elsewhere", "places phone calls as you; check which numbers it calls and when"),
             Review.risks(p.commands).map { it.removePrefix("command ").substringBefore(": ") },
         )
+        // A swipe deletes one, and a tap brings it back; never a timer, and the review says it deletes.
+        val swipe = src.replace("onTap: calls(\"call\", e)", "drag: horizontal; onDragEnd: calls(\"delete\", e); onTap: calls(\"undo\")")
+        val deletes = Compiler.compile(swipe)
+        assertEquals(listOf("read the phone's calls and contacts, once you allow it", "delete calls from the call log when you swipe or tap"), deletes.commands)
+        assertTrue(Review.risks(deletes.commands).any { it.contains("deletes calls from the phone's call log") })
+        assertTrue(compileError(src.replace(" Column {", " every 1m { calls(\"delete\", c.calls[0]) }\n Column {")).contains("not in a trigger"))
+        assertTrue(compileError(src.replace(" Column {", " when c.granted { calls(\"undo\") }\n Column {")).contains("not in a trigger"))
+        assertTrue(compileError(src.replace("calls(\"call\", e)", "calls(\"delete\")")).contains("calls(\"delete\", entry)"))
     }
 
     @Test fun bluetoothBatteryAskedForOnATap() {

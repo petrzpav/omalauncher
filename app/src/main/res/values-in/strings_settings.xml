@@ -51,7 +51,7 @@
     <string name="permissions_calendar">kalender</string>
     <string name="permissions_calendar_uses">acaramu, hanya dibaca · widget kalender · agen dengan omalauncher calendar</string>
     <string name="permissions_call_log">riwayat panggilan</string>
-    <string name="permissions_call_log_uses">panggilanmu, hanya dibaca · aplikasi telepon</string>
+    <string name="permissions_call_log_uses">panggilanmu, dan menghapus yang kamu geser · aplikasi telepon</string>
     <string name="permissions_contacts">kontak</string>
     <string name="permissions_contacts_uses">nama dan nomor, hanya dibaca · aplikasi telepon</string>
     <string name="permissions_phone">panggilan telepon</string>
