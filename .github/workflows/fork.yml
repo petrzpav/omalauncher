@@ -1,8 +1,9 @@
 name: fork
 
 # petrzpav's fork: every push to main builds dev.omalauncher.pavel, signed with the fork's own key, and puts the APK
-# on a GitHub release (v1.10.0-pavel.<run>), where Obtainium on the phone picks it up. Upstream's release.yml
-# (Simon's Play key) is disabled in the fork (gh workflow disable release). Merge upstream with: git fetch upstream && git merge upstream/main
+# on a GitHub release (v<version>-pavel.<run>), where Obtainium on the phone picks it up. Upstream's release.yml
+# (Simon's Play key) is disabled in the fork (gh workflow disable release). upstream.yml merges each upstream release
+# once a day; by hand: git fetch upstream --tags && git merge <tag>
 on:
   push:
     branches: [main]
