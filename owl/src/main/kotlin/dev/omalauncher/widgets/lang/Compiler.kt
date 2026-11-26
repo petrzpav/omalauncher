@@ -1584,6 +1584,8 @@ class Compiler private constructor(
                     // A call goes out as you: only for a touch, after the finger lifts, never on a timer or a fetched value.
                     if (handlerName == "onPress" || handlerName == "onRelease") fail("calls(\"call\", …) places a phone call over the widget before the finger lifts: put it in onTap", call.pos)
                     if (TriggerKind.entries.any { it.word == handlerName }) fail("calls(\"call\", …) places a phone call, so it works in onTap, not in a trigger", call.pos)
+                    // Nor from a handler no finger runs, like a Browser's onTitle: a page could call whenever it likes.
+                    if (handlerName !in CALL_HANDLERS) fail("calls(\"call\", …) places a phone call, so it works only in onTap or onLongPress", call.pos)
                     commands += "place phone calls when you tap"
                 }
                 val callsWord = if (call.name == "calls") (args.getOrNull(0)?.const as? Str)?.v else null
@@ -1592,6 +1594,10 @@ class Compiler private constructor(
                     if (TriggerKind.entries.any { it.word == handlerName }) fail("calls(\"$callsWord\") deletes calls, so it works in a handler of a touch like onTap or onDragEnd, not in a trigger", call.pos)
                     // The first may ask to change the call log, over the widget before the finger lifts.
                     if (callsWord == "delete" && (handlerName == "onPress" || handlerName == "onRelease")) fail("calls(\"delete\", …) may ask to change the call log before the finger lifts: put it in onTap or onDragEnd", call.pos)
+                    // Nor from a handler no finger runs, like a Browser's onTitle; undo may come on a press too.
+                    if (handlerName !in DELETE_HANDLERS && !(callsWord == "undo" && (handlerName == "onPress" || handlerName == "onRelease"))) {
+                        fail("calls(\"$callsWord\") ${if (callsWord == "delete") "deletes calls" else "brings deleted calls back"}, so it works only in a handler of a touch: onTap, onLongPress or onDragEnd", call.pos)
+                    }
                 }
                 // A word worked out as it runs may be delete too.
                 if (call.name == "calls" && (callsWord == "delete" || callsWord == null)) commands += "delete calls from the call log when you swipe or tap"

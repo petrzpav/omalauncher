@@ -396,6 +396,12 @@ internal class Words(
 /** The handlers paste() works in (owl 26 in this fork): a touch that asks for it, never a page's or a source's event. */
 internal val PASTE_HANDLERS = setOf("onTap", "onLongPress")
 
+/** The handlers calls("call") works in (owl 26 in this fork): a finger that has lifted, never a page's or a source's event. */
+internal val CALL_HANDLERS = setOf("onTap", "onLongPress")
+
+/** The handlers calls("delete") and calls("undo") work in, a swipe let go of too (undo also on a press). */
+internal val DELETE_HANDLERS = setOf("onTap", "onLongPress", "onDragEnd")
+
 /** What the store's review lists for a widget that reads android.calls. */
 internal const val CALLS_COMMAND = "read the phone's calls and contacts, once you allow it"
 
