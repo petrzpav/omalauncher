@@ -7,6 +7,11 @@ name: fork
 on:
   push:
     branches: [main]
+    # A push that changes only the READMEs builds no new APK, which Obtainium would offer as an update. Other .md
+    # files aren't skipped: the widget docs under app/src/main/assets ship inside the app.
+    paths-ignore:
+      - README.md
+      - .github/README.md
   workflow_dispatch:
 
 permissions:
