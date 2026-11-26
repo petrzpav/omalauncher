@@ -271,17 +271,21 @@ app "phone" {
       Box {
         fill: width
         height: 64
-        // Under the row as it's swiped: red, with the bin on the side it uncovers, brighter once letting go deletes.
+        // Under the row as it's swiped: the bin at the edge it uncovers, dim; solid red, and the word, once letting go
+        // deletes.
         if held && dragX != 0 {
           Row {
             fill: true
             gap: 8
             align: center
-            padding: [20, 0, 20, 0]
-            background: alpha(red, past ? 0.3 : 0.12)
-            if dragX < 0 { Spacer { weight: 1 } }
-            Icon { src: icDelete; tint: red; s: 20 }
-            Text { text: past ? "let go to delete" : "delete"; style: small; color: red; maxLines: 1 }
+            padding: [22, 0, 22, 0]
+            background: past ? red : alpha(red, 0.12)
+            if dragX < 0 {
+              Spacer { weight: 1 }
+              if past { Text { text: "delete"; style: small; color: background; maxLines: 1 } }
+            }
+            Icon { src: icDelete; tint: past ? background : red; s: 20 }
+            if dragX > 0 && past { Text { text: "delete"; style: small; color: background; maxLines: 1 } }
           }
         }
         Row {
@@ -626,21 +630,22 @@ app "phone" {
     // A call swiped away is deleted a few seconds later; until then it can come back. Under the list, so nothing in it
     // moves, and only with the list: on the keypad it would lift the keys.
     if tab == "recents" && (c.deleting ?? 0) > 0 {
+      // Lined up with the rows: the bin under the avatars, the words under the names, undo under the handsets.
       Row {
         fill: width
-        height: 48
-        gap: 8
+        height: 56
+        gap: 14
         align: center
-        padding: [12, 0, 4, 0]
+        padding: [12, 0, 6, 0]
         background: alpha(muted, 0.12)
-        Icon { src: icDelete; tint: muted; s: 18 }
+        Box { width: 40; align: center; Icon { src: icDelete; tint: muted; s: 18 } }
         Text { text: c.deleting == 1 ? "call deleted" : "${c.deleting} calls deleted"; style: small; weight: 1; maxLines: 1 }
         Box {
-          width: 88
-          height: 44
+          width: 72
+          fill: height
           align: center
           onTap: { haptic("light"); gone = []; calls("undo") }
-          Text { text: "undo"; color: accent; align: center; fill: width; maxLines: 1 }
+          Text { text: "undo"; style: small; color: accent; align: center; fill: width; maxLines: 1 }
         }
       }
     }
