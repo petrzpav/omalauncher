@@ -611,7 +611,7 @@ class WidgetInstance(
         // A phone call goes out as you: only from a touch.
         if (name == "calls" && key == "call" && inTrigger) return report("calls(\"call\", …) works in onTap, not in a trigger")
         // Deleting from the call log can't be taken back after a moment: only from a touch too.
-        if (name == "calls" && (key == "delete" || key == "undo") && inTrigger) return report("calls(\"$key\", …) works in a handler of a touch, not in a trigger")
+        if (name == "calls" && (key == "delete" || key == "undo") && inTrigger) return report("calls(\"$key\"${if (key == "delete") ", …" else ""}) works in a handler of a touch, not in a trigger")
         // Keys go to whatever window has the keyboard: only from a touch, never on a timer or a fetched value. Or from
         // what the user just said, to this widget's dictation a tap started: on said.final { typeText(value) }.
         if ((name == "pressKey" || name == "typeText" || name == "latch") && inTrigger && !byDictation) {

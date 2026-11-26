@@ -1425,6 +1425,10 @@ class LangTest {
         assertTrue(compileError(src.replace(" Column {", " every 1m { calls(\"delete\", c.calls[0]) }\n Column {")).contains("not in a trigger"))
         assertTrue(compileError(src.replace(" Column {", " when c.granted { calls(\"undo\") }\n Column {")).contains("not in a trigger"))
         assertTrue(compileError(src.replace("calls(\"call\", e)", "calls(\"delete\")")).contains("calls(\"delete\", entry)"))
+        assertTrue(compileError(src.replace("onTap: calls(\"call\", e)", "onPress: calls(\"delete\", e)")).contains("put it in onTap or onDragEnd"))
+        // A word worked out as it runs could be call or delete: the review lists both.
+        val computed = Compiler.compile(src.replace(" source c = android.calls\n", " source c = android.calls\n state w = \"open\"\n").replace("calls(\"call\", e)", "calls(w, e)"))
+        assertTrue(computed.commands.containsAll(listOf("place phone calls when you tap", "delete calls from the call log when you swipe or tap")))
     }
 
     @Test fun bluetoothBatteryAskedForOnATap() {

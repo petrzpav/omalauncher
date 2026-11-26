@@ -48,13 +48,13 @@ app "phone" {
   state callId = ""                 // which call key that was
   state filledAt = 0                // when the empty keypad brought back the last number, so a double tap doesn't call it
   state voipHint = true persist     // the notification-access banner, until it's closed
-  // The call being swiped, by id, and how far; and the one let go of to delete, hidden until the list leaves it out.
+  // The call being swiped, by id, and how far; and those just let go of to delete, hidden until the list leaves them out.
   state dragging = ""
   state dragX = 0
-  state swiped = ""
-  state swipedAt = 0
+  state gone = []
+  state goneAt = 0
 
-  let calls = (c.calls ?? []).filter(e => e.id != swiped || tick - swipedAt >= 2)
+  let calls = tick - goneAt >= 3 ? (c.calls ?? []) : (c.calls ?? []).filter(e => gone.indexOf(e.id) < 0)
   let wide = screenWidth ?? 400
   let missed = calls.filter(e => e.direction == "missed")
   let listed = only == "missed" ? missed : calls
@@ -297,14 +297,15 @@ app "phone" {
           // Sideways only, so the list still scrolls under a finger that lands on a call.
           drag: horizontal
           onDrag: {
+            // A drag on another row starts from nothing, even if the last one never ended.
+            dragX = dragging == e.id ? dragX + dx : dx
             dragging = e.id
-            dragX = dragX + dx
           }
           onDragEnd: {
             if dragging == e.id && abs(dragX) > wide * 0.4 {
               haptic()
-              swiped = e.id
-              swipedAt = tick
+              gone = tick - goneAt < 3 ? flatten([gone, [e.id]], 1) : [e.id]
+              goneAt = tick
               open = open.filter(x => x != e.id)
               calls("delete", e)
             }
@@ -622,8 +623,9 @@ app "phone" {
       }
     }
 
-    // A call swiped away is deleted a few seconds later; until then it can come back. Under the list, so nothing in it moves.
-    if (c.deleting ?? 0) > 0 {
+    // A call swiped away is deleted a few seconds later; until then it can come back. Under the list, so nothing in it
+    // moves, and only with the list: on the keypad it would lift the keys.
+    if tab == "recents" && (c.deleting ?? 0) > 0 {
       Row {
         fill: width
         height: 48
@@ -637,7 +639,7 @@ app "phone" {
           width: 88
           height: 44
           align: center
-          onTap: { haptic("light"); swiped = ""; calls("undo") }
+          onTap: { haptic("light"); gone = []; calls("undo") }
           Text { text: "undo"; color: accent; align: center; fill: width; maxLines: 1 }
         }
       }

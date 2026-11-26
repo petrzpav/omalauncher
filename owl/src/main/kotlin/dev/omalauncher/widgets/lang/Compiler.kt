@@ -1579,9 +1579,12 @@ class Compiler private constructor(
                 val callsWord = if (call.name == "calls") (args.getOrNull(0)?.const as? Str)?.v else null
                 if (call.name == "calls" && (callsWord == "delete" || callsWord == "undo")) {
                     // Gone from the call log for good a moment later: only for a touch, never on a timer or a fetched value.
-                    if (TriggerKind.entries.any { it.word == handlerName }) fail("calls(\"$callsWord\", …) deletes calls, so it works in a handler of a touch like onTap or onDragEnd, not in a trigger", call.pos)
-                    if (callsWord == "delete") commands += "delete calls from the call log when you swipe or tap"
+                    if (TriggerKind.entries.any { it.word == handlerName }) fail("calls(\"$callsWord\") deletes calls, so it works in a handler of a touch like onTap or onDragEnd, not in a trigger", call.pos)
+                    // The first may ask to change the call log, over the widget before the finger lifts.
+                    if (callsWord == "delete" && (handlerName == "onPress" || handlerName == "onRelease")) fail("calls(\"delete\", …) may ask to change the call log before the finger lifts: put it in onTap or onDragEnd", call.pos)
                 }
+                // A word worked out as it runs may be delete too.
+                if (call.name == "calls" && (callsWord == "delete" || callsWord == null)) commands += "delete calls from the call log when you swipe or tap"
                 if (call.name in ASKS && (args.getOrNull(0)?.const as? Str)?.v == "request") {
                     val ask = "${call.name}(\"request\")"
                     // Asking for what nothing reads: what it allows is only in the source.

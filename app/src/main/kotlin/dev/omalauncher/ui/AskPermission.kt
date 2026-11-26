@@ -131,8 +131,8 @@ class WidgetAsks(
     private val contacts = AskPermission(activity, Manifest.permission.READ_CONTACTS, orSettings = true)
     private val calling = AskPermission(activity, Manifest.permission.CALL_PHONE)
 
-    // calls("delete") on one of the phone's own calls asks for this the first time.
-    private val callLogWrite = AskPermission(activity, Manifest.permission.WRITE_CALL_LOG)
+    // calls("delete") on one of the phone's own calls asks for this the first time (Android mostly allows it with reading).
+    private val callLogWrite = AskPermission(activity, Manifest.permission.WRITE_CALL_LOG, orSettings = true)
 
     // Asked for only from Android 12 on: before it, an install-time permission covers AirPods, which then never ask.
     @SuppressLint("InlinedApi")

@@ -29,12 +29,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -241,18 +243,19 @@ class PhoneCalls(
         deleting[id] =
             scope.launch {
                 delay(UNDO_MS)
-                gone()
-                // Shown again only once it's gone from what the list is read from.
+                // Past undo now: a calls("undo") from here on leaves it, and the delete runs to its end.
                 deleting.remove(id)
+                withContext(NonCancellable) { gone() }
+                // Shown again only once it's gone from what the list is read from.
                 hidden = hidden - id
             }
     }
 
-    /** calls("undo"): every entry calls("delete") took away and hasn't deleted yet comes back. */
+    /** calls("undo"): every entry calls("delete") took away and hasn't started deleting yet comes back. */
     fun undo() {
         for (job in deleting.values) job.cancel()
+        hidden = hidden - deleting.keys
         deleting.clear()
-        hidden = emptySet()
     }
 
     /** Started from the launcher in front; false where nothing handles it, which mustn't crash the launcher. */
@@ -261,19 +264,34 @@ class PhoneCalls(
     /** android.calls: {granted, contactsGranted, canCall, voip, calls, contacts, deleting}, the lists empty until each is allowed. */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun updates(): Flow<Value> =
-        snapshotFlow { Grants(log, contacts, calling, resumed, hidden) }.flatMapLatest { g ->
+        snapshotFlow { Grants(log, contacts, calling, resumed) }.flatMapLatest { g ->
             changes(g).mapLatest {
                 // Provider queries can block; never on the UI thread. A grant can be taken back at any time.
                 withContext(Dispatchers.IO) { value(g) }
-            }.catch { if (it is SecurityException) emit(value(Grants(false, false, calling, resumed, hidden))) else throw it }
-        }.distinctUntilChanged()
+            }.catch { if (it is SecurityException) emit(value(Grants(false, false, calling, resumed))) else throw it }
+        }.combine(snapshotFlow { hidden }, ::withoutHidden).distinctUntilChanged()
+
+    /** What was read, less the entries calls("delete") took away: at once, without reading it all again. */
+    private fun withoutHidden(
+        read: Value,
+        hidden: Set<String>,
+    ): Value {
+        val fields = (read as? Obj)?.fields ?: return read
+        val calls = (fields["calls"] as? Lst)?.items.orEmpty()
+        return Obj(
+            fields +
+                mapOf(
+                    "calls" to Lst(if (hidden.isEmpty()) calls else calls.filter { (it as? Obj)?.fields?.get("id").textOrNull() !in hidden }),
+                    "deleting" to Num(hidden.size.toDouble()),
+                ),
+        )
+    }
 
     private data class Grants(
         val log: Boolean,
         val contacts: Boolean,
         val calling: Boolean,
         val resumed: Int,
-        val hidden: Set<String>,
     )
 
     /** The call log, the contacts and the calls kept from other apps, as each changes. */
@@ -322,7 +340,7 @@ class PhoneCalls(
                 )
             }
         }
-        val calls = rows.sortedByDescending { it.first }.map { it.second }.filter { (it as Obj).fields["id"].textOrNull() !in g.hidden }.take(MAX_CALLS)
+        val calls = rows.sortedByDescending { it.first }.take(MAX_CALLS).map { it.second }
         return Obj(
             mapOf(
                 "granted" to bool(g.log),
@@ -330,7 +348,6 @@ class PhoneCalls(
                 "canCall" to bool(g.calling),
                 "voip" to bool(recording && media.granted),
                 "calls" to Lst(calls),
-                "deleting" to Num(g.hidden.size.toDouble()),
                 "contacts" to Lst(people.map { it.value }),
             ),
         )
