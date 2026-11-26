@@ -553,11 +553,12 @@ app "phone" {
           }
         }
       }
-      Box {
+      // The number on a faint line, as the search's, so it shows where to hold to paste.
+      Column {
         fill: width
         height: 64
-        align: center
-        padding: [24, 0]
+        gap: 0
+        padding: [32, 0, 32, 4]
         ripple: false
         // A long press pastes a number copied anywhere, as phones' dialers do, in place of what's typed: the first one of
         // seven characters or more in the text, else the first at all (112), written any way ("+420 777 123 456" with web
@@ -572,7 +573,13 @@ app "phone" {
           let pasted = startsWith(pastedRun, "+") ? "+${pastedDigits}" : (startsWith(pastedDigits, "00") && len(pastedDigits) > 6 ? "+${sub(pastedDigits, 2, len(pastedDigits))}" : pastedDigits)
           if pastedDigits != "" && len(pasted) <= 24 { digits = pasted }
         }
-        Text { text: digits == "" ? " " : digits; fontSize: min(36, ((screenWidth ?? 400) - 48) * 1.5 / max(len(digits), 10)); fontWeight: 300; align: center; maxLines: 1 }
+        Box {
+          weight: 1
+          fill: width
+          align: center
+          Text { text: digits == "" ? " " : digits; fontSize: min(36, ((screenWidth ?? 400) - 64) * 1.5 / max(len(digits), 10)); fontWeight: 300; align: center; maxLines: 1 }
+        }
+        Box { fill: width; height: 1; background: alpha(muted, digits != "" ? 0.6 : 0.35) }
       }
       Column {
         fill: width
