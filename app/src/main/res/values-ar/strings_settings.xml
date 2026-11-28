@@ -70,6 +70,8 @@
     <string name="permissions_contacts_uses">الأسماء والأرقام، للقراءة فقط · تطبيقات الهاتف</string>
     <string name="permissions_phone">المكالمات الهاتفية</string>
     <string name="permissions_phone_uses">المكالمات التي تبدؤها من تطبيق هاتف</string>
+    <string name="permissions_kept_calls">المكالمات المحفوظة</string>
+    <string name="permissions_kept_calls_uses">واتساب وماسنجر، ومكالمات الهاتف عند غياب سجل المكالمات، من إشعاراتها · على الهاتف فقط · إيقافها يحذفها</string>
     <string name="permissions_bluetooth">بلوتوث</string>
     <string name="permissions_bluetooth_uses">بطاريات AirPods وإعداداتها · أدوات AirPods · الوكلاء عبر omalauncher airpods</string>
     <string name="permissions_notifications">الإشعارات</string>

@@ -1471,6 +1471,8 @@ class LangTest {
         assertTrue(compileError(src.replace(" Column {", page.format("calls(\"call\", \"123\")"))).contains("works only in onTap or onLongPress"))
         assertTrue(compileError(src.replace(" Column {", page.format("calls(\"delete\", c.calls[0])"))).contains("works only in a handler of a touch"))
         assertTrue(compileError(src.replace(" Column {", page.format("calls(\"undo\")"))).contains("works only in a handler of a touch"))
+        // Asking starts keeping calls: a page's events can't either.
+        assertTrue(compileError(src.replace(" Column {", page.format("calls(\"request\")"))).contains("starts keeping your calls, so it works only in onTap or onLongPress"))
         Compiler.compile(src.replace("onTap: calls(\"call\", e)", "onLongPress: calls(\"call\", e); onPress: calls(\"undo\")"))
         // A word worked out as it runs could be call or delete: the review lists both.
         val computed = Compiler.compile(src.replace(" source c = android.calls\n", " source c = android.calls\n state w = \"open\"\n").replace("calls(\"call\", e)", "calls(w, e)"))
