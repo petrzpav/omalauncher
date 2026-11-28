@@ -218,6 +218,12 @@ internal val SINCE =
         // owl 26 in this fork: the clipboard's text, read when a touch asks for it, like a number pasted into a keypad.
         mapOf("paste" to 26)
 
+/** The level from which a file that shows a right-to-left language's `strings` set is laid out right to left; see [Program.rtl]. */
+internal const val RTL_LEVEL = 27
+
+/** The languages written right to left, by the codes `strings` and `lang()` use. */
+internal val RTL_LANGUAGES = setOf("ar", "fa", "he", "ur", "ps", "sd", "ug", "yi", "dv", "ckb")
+
 /** A Shader's `uniform shader name;`, an image it samples, named like this in [SINCE]. */
 internal const val SHADER_IMAGE = "uniform shader"
 
