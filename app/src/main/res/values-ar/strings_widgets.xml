@@ -6,4 +6,5 @@
     <string name="widgets_copied">تم النسخ</string>
     <!-- Name of the notification channel for notifications widgets post, shown in Android's notification settings. -->
     <string name="widgets_notify_channel">الأدوات</string>
+    <string name="widgets_status_channel">مؤقتات الأدوات وحالتها</string>
 </resources>

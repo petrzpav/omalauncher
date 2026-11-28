@@ -192,6 +192,9 @@
     <string name="linux_notification_channel">جلسة Linux</string>
     <!-- Name of the notification channel for what agents and scripts in Linux post with `omalauncher notify`, shown in Android's notification settings. -->
     <string name="linux_notify_channel">الوكلاء والنصوص البرمجية</string>
+    <string name="linux_media_channel">التشغيل من Linux</string>
+    <string name="linux_media_rewind">رجوع %1$d ثانية</string>
+    <string name="linux_media_forward">تقديم %1$d ثانية</string>
     <!-- %1$s: the install's phase (download arch linux). -->
     <string name="linux_notification_installing">جارٍ تثبيت Linux · ⁨%1$s⁩</string>
     <!-- %1$d: percent done, %2$s: the install's phase (download arch linux). -->

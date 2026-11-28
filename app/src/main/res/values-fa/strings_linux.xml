@@ -184,6 +184,9 @@
     <string name="linux_notification_channel">نشست Linux</string>
     <!-- Name of the notification channel for what agents and scripts in Linux post with `omalauncher notify`, shown in Android's notification settings. -->
     <string name="linux_notify_channel">عامل‌ها و اسکریپت‌ها</string>
+    <string name="linux_media_channel">پخش از Linux</string>
+    <string name="linux_media_rewind">%1$d ثانیه عقب</string>
+    <string name="linux_media_forward">%1$d ثانیه جلو</string>
     <!-- %1$s: the install's phase (download arch linux). -->
     <string name="linux_notification_installing">در حال نصب Linux · ⁨%1$s⁩</string>
     <!-- %1$d: percent done, %2$s: the install's phase (download arch linux). -->
